@@ -1,139 +1,177 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Borrachos.doxs Clipboard V2</title>
+        <!-- CSS is embedded later or linked if created separately -->
+        <link rel="stylesheet" href="style.css" />
+        <link rel="stylesheet" href="mobile.css" />
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Borrachos.doxs Clipboard V2</title>
-    <!-- CSS is embedded later or linked if created separately -->
-    <link rel="stylesheet" href="style.css">
+        <!-- Fonts -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap"
+            rel="stylesheet"
+        />
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+        <!-- Media Tags Library for Audio Covers -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    </head>
 
-    <!-- Media Tags Library for Audio Covers -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
-</head>
+    <body class="bg-dark">
+        <!-- Header -->
+        <header class="top-bar">
+            <div class="app-title">Borrachos.doxs Clipboard ⚡</div>
+            <div class="user-info" id="userDisplay">...</div>
+        </header>
 
-<body class="bg-dark">
-
-    <!-- Header -->
-    <header class="top-bar">
-        <div class="app-title">Borrachos.doxs Clipboard ⚡</div>
-        <div class="user-info" id="userDisplay">...</div>
-    </header>
-
-    <!-- Main Desktop Area -->
-    <main class="desktop-area">
-        <div id="folderGrid" class="folder-grid">
-
-            <!-- Add Button: Static first item in list (conceptually) or last in DOM -->
-            <div class="add-folder-btn-container" id="addFolderBtn">
-                <div class="add-btn-inner"><span>+</span></div>
-                <p>Nueva Carpeta</p>
-            </div>
-
-        </div>
-    </main>
-
-    <!-- SIDEBAR OVERLAY / FOLDER MANAGER -->
-    <div id="folderContentOverlay" class="overlay hidden">
-        <div class="folder-window-layout">
-
-            <!-- Global Close Button (Top Right) -->
-            <button id="globalCloseBtn" class="global-close-btn" title="Cerrar">&times;</button>
-
-            <!-- Sidebar -->
-            <aside class="window-sidebar">
-                <div class="sidebar-header">
-                    <h2 id="currentFolderTitle">Carpeta</h2>
-                </div>
-
-                <nav class="sidebar-nav">
-
-                    <!-- Media Options -->
-                    <label class="sidebar-item">
-                        <span class="icon">📷</span> Agregar Imagen
-                        <input type="file" id="uploadImage" accept="image/*" hidden>
-                    </label>
-
-                    <label class="sidebar-item">
-                        <span class="icon">🎥</span> Agregar Video
-                        <input type="file" id="uploadVideo" accept="video/*" hidden>
-                    </label>
-
-                    <label class="sidebar-item">
-                        <span class="icon">🎵</span> Agregar Audio
-                        <input type="file" id="uploadAudio" accept="audio/*" hidden>
-                    </label>
-
-                    <!-- Text Options -->
-                    <label class="sidebar-item">
-                        <span class="icon">📄</span> Subir Texto (.txt)
-                        <input type="file" id="uploadTxt" accept=".txt" hidden>
-                    </label>
-
-                    <button id="addTextBtn" class="sidebar-item">
-                        <span class="icon">✍️</span> Escribir Nota
-                    </button>
-
-                    <div class="sidebar-divider"></div>
-
-                    <!-- Appearance -->
-                    <label class="sidebar-item special">
-                        <span class="icon">🖼️</span> Cambiar Portada
-                        <input type="file" id="setCover" accept="image/*" hidden>
-                    </label>
-
-                    <button id="removeCoverBtn" class="sidebar-item warning hidden">
-                        <span class="icon">🚫</span> Quitar Portada
-                    </button>
-
-                    <!-- Management -->
-                    <button id="deleteFolderBtn" class="sidebar-item danger">
-                        <span class="icon">🗑️</span> Eliminar Carpeta
-                    </button>
-                </nav>
-            </aside>
-
-            <!-- Content Area -->
-            <section class="window-main-content">
-                <div id="contentArea" class="content-grid">
-                    <!-- Items injected by JS -->
-                </div>
-            </section>
-
-        </div>
-    </div>
-
-    <!-- Name Prompt Modal -->
-    <div id="nameModal" class="overlay hidden">
-        <div class="modal-card">
-            <h2>¡Hola! 👋</h2>
-            <p>¿Quién está usando este clipboard?</p>
-            <input type="text" id="userNameInput" placeholder="Tu nombre..." autocomplete="off">
-            <button id="saveNameBtn" class="primary-btn">Entrar</button>
-        </div>
-    </div>
-
-    <!-- Template: Folder Item -->
-    <template id="folderTemplate">
-        <div class="folder-container">
-            <div class="folder-graphic">
-                <div class="folder-back"></div>
-                <!-- Stack for preview items -->
-                <div class="items-stack"></div>
-                <div class="folder-front">
-                    <div class="cover-image hidden"></div>
+        <!-- Main Desktop Area -->
+        <main class="desktop-area">
+            <div id="folderGrid" class="folder-grid">
+                <!-- Add Button: Static first item in list (conceptually) or last in DOM -->
+                <div class="add-folder-btn-container" id="addFolderBtn">
+                    <div class="add-btn-inner"><span>+</span></div>
+                    <p>Nueva Carpeta</p>
                 </div>
             </div>
-            <div class="folder-name" contenteditable="true">Carpeta</div>
+        </main>
+
+        <!-- SIDEBAR OVERLAY / FOLDER MANAGER -->
+        <div id="folderContentOverlay" class="overlay hidden">
+            <div class="folder-window-layout">
+                <!-- Global Close Button (Top Right) -->
+                <button
+                    id="globalCloseBtn"
+                    class="global-close-btn"
+                    title="Cerrar"
+                >
+                    &times;
+                </button>
+
+                <!-- Sidebar -->
+                <aside class="window-sidebar">
+                    <div class="sidebar-header">
+                        <h2 id="currentFolderTitle">Carpeta</h2>
+                    </div>
+
+                    <nav class="sidebar-nav">
+                        <!-- Media Options -->
+                        <label class="sidebar-item">
+                            <span class="icon">📷</span> Agregar Imagen
+                            <input
+                                type="file"
+                                id="uploadImage"
+                                accept="image/*"
+                                hidden
+                            />
+                        </label>
+
+                        <label class="sidebar-item">
+                            <span class="icon">🎥</span> Agregar Video
+                            <input
+                                type="file"
+                                id="uploadVideo"
+                                accept="video/*"
+                                hidden
+                            />
+                        </label>
+
+                        <label class="sidebar-item">
+                            <span class="icon">🎵</span> Agregar Audio
+                            <input
+                                type="file"
+                                id="uploadAudio"
+                                accept="audio/*"
+                                hidden
+                            />
+                        </label>
+
+                        <!-- Text Options -->
+                        <label class="sidebar-item">
+                            <span class="icon">📄</span> Subir Texto (.txt)
+                            <input
+                                type="file"
+                                id="uploadTxt"
+                                accept=".txt"
+                                hidden
+                            />
+                        </label>
+
+                        <button id="addTextBtn" class="sidebar-item">
+                            <span class="icon">✍️</span> Escribir Nota
+                        </button>
+
+                        <div class="sidebar-divider"></div>
+
+                        <!-- Appearance -->
+                        <label class="sidebar-item special">
+                            <span class="icon">🖼️</span> Cambiar Portada
+                            <input
+                                type="file"
+                                id="setCover"
+                                accept="image/*"
+                                hidden
+                            />
+                        </label>
+
+                        <button
+                            id="removeCoverBtn"
+                            class="sidebar-item warning hidden"
+                        >
+                            <span class="icon">🚫</span> Quitar Portada
+                        </button>
+
+                        <!-- Management -->
+                        <button
+                            id="deleteFolderBtn"
+                            class="sidebar-item danger"
+                        >
+                            <span class="icon">🗑️</span> Eliminar Carpeta
+                        </button>
+                    </nav>
+                </aside>
+
+                <!-- Content Area -->
+                <section class="window-main-content">
+                    <div id="contentArea" class="content-grid">
+                        <!-- Items injected by JS -->
+                    </div>
+                </section>
+            </div>
         </div>
-    </template>
 
-    <script src="script.js"></script>
-</body>
+        <!-- Name Prompt Modal -->
+        <div id="nameModal" class="overlay hidden">
+            <div class="modal-card">
+                <h2>¡Hola! 👋</h2>
+                <p>¿Quién está usando este clipboard?</p>
+                <input
+                    type="text"
+                    id="userNameInput"
+                    placeholder="Tu nombre..."
+                    autocomplete="off"
+                />
+                <button id="saveNameBtn" class="primary-btn">Entrar</button>
+            </div>
+        </div>
 
+        <!-- Template: Folder Item -->
+        <template id="folderTemplate">
+            <div class="folder-container">
+                <div class="folder-graphic">
+                    <div class="folder-back"></div>
+                    <!-- Stack for preview items -->
+                    <div class="items-stack"></div>
+                    <div class="folder-front">
+                        <div class="cover-image hidden"></div>
+                    </div>
+                </div>
+                <div class="folder-name" contenteditable="true">Carpeta</div>
+            </div>
+        </template>
+
+        <script src="script.js"></script>
+    </body>
 </html>

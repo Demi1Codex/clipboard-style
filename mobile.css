@@ -1,0 +1,132 @@
+/* Show the close button by default on mobile */
+@media (max-width: 768px) {
+    .global-close-btn {
+        display: flex;
+    }
+
+    .top-bar{
+        padding: 0 10px;
+    }
+
+    .app-title {
+        font-size: 1rem;
+    }
+
+    .user-info{
+        font-size: 0.8rem;
+        padding: 5px 10px;
+    }
+
+    .desktop-area{
+        padding: 20px;
+    }
+
+    .folder-grid{
+        gap: 20px;
+        justify-content: center;
+    }
+
+    .folder-container{
+        width: 100px;
+    }
+
+    .folder-graphic{
+        width: 90px;
+        height: 70px;
+    }
+
+    .folder-name{
+        font-size: 0.8rem;
+    }
+
+    .add-folder-btn-container{
+        width: 100px;
+        height: 90px;
+    }
+
+    .add-btn-inner{
+        width: 30px;
+        height: 30px;
+    }
+
+    .add-btn-inner span{
+        font-size: 1rem;
+    }
+
+    .add-folder-btn-container p{
+        font-size: 0.7rem;
+    }
+
+    .folder-window-layout{
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        flex-direction: column;
+    }
+
+    .window-sidebar{
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .sidebar-header{
+        padding: 15px;
+    }
+
+    .sidebar-header h2{
+        font-size: 1.2rem;
+    }
+
+    .sidebar-nav{
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 10px;
+    }
+
+    .sidebar-item{
+        padding: 10px 12px;
+        font-size: 0.8rem;
+    }
+
+    .sidebar-item .icon{
+        font-size: 1rem;
+    }
+
+    .window-main-content{
+        padding: 15px;
+    }
+
+    .content-grid{
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 15px;
+    }
+
+    .content-item{
+        min-height: 120px;
+    }
+
+    .modal-card{
+        width: 90%;
+        padding: 30px;
+    }
+
+    .modal-card h2{
+        font-size: 1.5rem;
+    }
+
+    .modal-card p{
+        font-size: 0.9rem;
+    }
+
+    .modal-card input{
+        font-size: 1rem;
+        padding: 12px;
+    }
+
+    .primary-btn{
+        font-size: 1rem;
+        padding: 10px 20px;
+    }
+}

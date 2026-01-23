@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carpeta Estilo Clipboard</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+
+<body class="bg-dark">
+
+    <main class="desktop">
+        <!-- Folder Container -->
+        <div class="folder-container" id="myFolder">
+            <div class="folder text-overlay">
+                <div class="folder-back"></div>
+                <div class="folder-pattern"></div> <!-- Decorative pattern -->
+                <div class="folder-preview">
+                    <!-- Image preview can be injected here -->
+                    <img src="" alt="" class="preview-img hidden" id="previewImg">
+                    <span class="placeholder-text">Carpeta</span>
+                </div>
+                <div class="folder-front"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Overlay / Open Folder View -->
+    <div id="folderContentOverlay" class="overlay hidden">
+        <div class="opened-folder-window">
+            <header class="window-header">
+                <h2>Contenido de la Carpeta</h2>
+                <button id="closeFolderBtn" class="close-btn">
+                    &times;
+                </button>
+            </header>
+
+            <div class="window-toolbar">
+                <div class="toolbar-group">
+                    <label for="uploadImage" class="tool-btn icon-btn" title="Agregar Imagen">📷</label>
+                    <input type="file" id="uploadImage" accept="image/*" hidden>
+
+                    <label for="uploadVideo" class="tool-btn icon-btn" title="Agregar Video">🎥</label>
+                    <input type="file" id="uploadVideo" accept="video/*" hidden>
+
+                    <label for="uploadAudio" class="tool-btn icon-btn" title="Agregar Audio">🎵</label>
+                    <input type="file" id="uploadAudio" accept="audio/*" hidden>
+
+                    <button id="addTextBtn" class="tool-btn icon-btn" title="Agregar Texto">📝</button>
+
+                    <label for="setCover" class="tool-btn icon-btn special" title="Cambiar Portada Carpeta">🖼️
+                        Portada</label>
+                    <input type="file" id="setCover" accept="image/*" hidden>
+                </div>
+            </div>
+
+            <div class="window-content" id="contentArea">
+                <!-- Content will be added here dynamically -->
+                <div class="empty-state">
+                    <p>La carpeta está vacía. Agrega contenido usando la barra de herramientas.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

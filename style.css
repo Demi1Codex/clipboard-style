@@ -21,7 +21,7 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    font-family: 'Outfit', sans-serif;
+    font-family: "Outfit", sans-serif;
 }
 
 body {
@@ -162,7 +162,7 @@ body {
 }
 
 .folder-back::before {
-    content: '';
+    content: "";
     position: absolute;
     top: -12px;
     left: 0;
@@ -333,7 +333,9 @@ body {
     background: linear-gradient(160deg, #0e1e18, #050f0a);
     border-radius: 20px;
     position: relative;
-    box-shadow: 0 0 60px rgba(0, 255, 170, 0.1), 0 0 0 1px rgba(0, 255, 170, 0.15);
+    box-shadow:
+        0 0 60px rgba(0, 255, 170, 0.1),
+        0 0 0 1px rgba(0, 255, 170, 0.15);
     display: flex;
     overflow: hidden;
 }
@@ -465,7 +467,11 @@ body {
     flex: 1;
     padding: 30px;
     overflow-y: auto;
-    background: radial-gradient(circle at center, rgba(0, 255, 170, 0.03) 0%, transparent 70%);
+    background: radial-gradient(
+        circle at center,
+        rgba(0, 255, 170, 0.03) 0%,
+        transparent 70%
+    );
 }
 
 .content-grid {
@@ -618,4 +624,126 @@ body {
     background: white;
     color: black;
     box-shadow: 0 0 20px white;
+}
+
+/* Styles for new modals */
+#exportModal .modal-card,
+#importModal .modal-card {
+    width: 50vw;
+    max-width: 600px;
+    position: relative;
+}
+
+#exportModal textarea,
+#importModal textarea {
+    width: 100%;
+    min-height: 150px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-light);
+    padding: 15px;
+    border-radius: 12px;
+    font-family: monospace;
+    font-size: 0.9rem;
+    resize: vertical;
+    margin-bottom: 20px;
+}
+
+#importModal input {
+    margin-top: 10px;
+}
+
+#exportModal .global-close-btn,
+#importModal .global-close-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    width: 35px;
+    height: 35px;
+    font-size: 1.5rem;
+}
+
+/* Download FAB */
+.fab-btn {
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    background: var(--neon-green);
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 5px 20px var(--neon-green-glow);
+    cursor: pointer;
+    z-index: 1500;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation: scaleIn 0.3s;
+}
+
+.fab-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 8px 30px var(--neon-green-glow);
+}
+
+.fab-btn span {
+    font-size: 1.8rem;
+    color: black;
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Selected item highlight */
+.content-item.selected {
+    border-color: var(--primary-purple);
+    box-shadow: 0 0 20px var(--primary-purple-glow);
+    transform: translateY(-2px) scale(1.02);
+}
+
+/* Styles for new modals */
+#exportModal .modal-card,
+#importModal .modal-card {
+    width: 50vw;
+    max-width: 600px;
+    position: relative;
+}
+
+#exportModal textarea,
+#importModal textarea {
+    width: 100%;
+    min-height: 150px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-light);
+    padding: 15px;
+    border-radius: 12px;
+    font-family: monospace;
+    font-size: 0.9rem;
+    resize: vertical;
+    margin-bottom: 20px;
+}
+
+#importModal input {
+    margin-top: 10px;
+}
+
+#exportModal .global-close-btn,
+#importModal .global-close-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    width: 35px;
+    height: 35px;
+    font-size: 1.5rem;
 }

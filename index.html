@@ -35,6 +35,11 @@
                     <div class="add-btn-inner"><span>+</span></div>
                     <p>Nueva Carpeta</p>
                 </div>
+                <!-- Import Button -->
+                <div class="add-folder-btn-container" id="importFolderBtn">
+                    <div class="add-btn-inner"><span>📥</span></div>
+                    <p>Importar Carpeta</p>
+                </div>
             </div>
         </main>
 
@@ -103,6 +108,18 @@
                             <span class="icon">✍️</span> Escribir Nota
                         </button>
 
+                        <label class="sidebar-item">
+                            <span class="icon">📎</span> Agregar Archivo
+                            <input type="file" id="uploadFile" hidden />
+                        </label>
+
+                        <div class="sidebar-divider"></div>
+
+                        <!-- Export button -->
+                        <button id="exportFolderBtn" class="sidebar-item">
+                            <span class="icon">📤</span> Exportar Carpeta
+                        </button>
+
                         <div class="sidebar-divider"></div>
 
                         <!-- Appearance -->
@@ -139,6 +156,15 @@
                         <!-- Items injected by JS -->
                     </div>
                 </section>
+
+                <!-- Download Button -->
+                <button
+                    id="downloadItemBtn"
+                    class="fab-btn hidden"
+                    title="Descargar Archivo"
+                >
+                    <span>⬇️</span>
+                </button>
             </div>
         </div>
 
@@ -154,6 +180,45 @@
                     autocomplete="off"
                 />
                 <button id="saveNameBtn" class="primary-btn">Entrar</button>
+            </div>
+        </div>
+
+        <!-- Export Modal -->
+        <div id="exportModal" class="overlay hidden">
+            <div class="modal-card">
+                <button class="global-close-btn" id="closeExportModalBtn">
+                    &times;
+                </button>
+                <h2>Exportar Carpeta</h2>
+                <p>Copia este código para compartir tu carpeta encriptada.</p>
+                <textarea id="exportData" readonly></textarea>
+                <button id="copyExportCodeBtn" class="primary-btn">
+                    Copiar Código
+                </button>
+            </div>
+        </div>
+
+        <!-- Import Modal -->
+        <div id="importModal" class="overlay hidden">
+            <div class="modal-card">
+                <button class="global-close-btn" id="closeImportModalBtn">
+                    &times;
+                </button>
+                <h2>Importar Carpeta</h2>
+                <p>Pega el código de la carpeta que quieres importar.</p>
+                <textarea
+                    id="importData"
+                    placeholder="Pega el código aquí..."
+                ></textarea>
+                <p>¿Quién compartió esta carpeta?</p>
+                <input
+                    type="text"
+                    id="importAuthorName"
+                    placeholder="Nombre del autor..."
+                />
+                <button id="executeImportBtn" class="primary-btn">
+                    Importar
+                </button>
             </div>
         </div>
 

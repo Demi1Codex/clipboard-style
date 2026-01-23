@@ -152,7 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
             coverImg.style.backgroundImage = `url(${url})`;
             coverImg.classList.remove("hidden");
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       // Stack Preview (Logic Improved for Visibility)
@@ -269,9 +269,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (item.type === "text") {
         html = `<p>${item.text}</p>`;
       } else if (item.type === "file") {
-        html = `<div class="audio-wrapper"><div class="audio-art">📎</div><p style="text-align:center; word-break:break-all;">${
-          item.name || "Archivo"
-        }</p></div>`;
+        html = `<div class="audio-wrapper"><div class="audio-art">📎</div><p style="text-align:center; word-break:break-all;">${item.name || "Archivo"
+          }</p></div>`;
       } else if (item.fileId) {
         const blob = await getFromDB(item.fileId);
         if (blob) {
@@ -283,12 +282,10 @@ document.addEventListener("DOMContentLoaded", () => {
             html = `<video src="${url}" controls></video>`;
           } else if (item.type === "audio") {
             html = `<div class="audio-wrapper">
-                                    <div class="audio-art" id="art_${
-                                      item.fileId
-                                    }">🎵</div>
-                                     <p style="text-align:center; font-size: 0.8em;">${
-                                       item.name
-                                     }</p>
+                                    <div class="audio-art" id="art_${item.fileId
+              }">🎵</div>
+                                     <p style="text-align:center; font-size: 0.8em;">${item.name
+              }</p>
                                     <audio src="${url}" controls></audio>
                                 </div>`;
             getAudioCover(blob).then((artUrl) => {
@@ -447,9 +444,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  /* --- COMPRESSION-BASED SHARING LOGIC --- */
+  /* --- ROBUST BINARY SHARING LOGIC --- */
 
-  // Elements
+  // UI elements
   const importFolderBtn = document.getElementById("importFolderBtn");
   const exportFolderBtn = document.getElementById("exportFolderBtn");
   const importModal = document.getElementById("importModal");
@@ -463,7 +460,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const importDataEl = document.getElementById("importData");
   const importFileEl = document.getElementById("importFile");
 
-  // Conversion Helpers
+  // Helper: Blob to Base64 (Only for small payloads)
   const blobToBase64 = (blob) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -473,71 +470,91 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   };
 
+  // Helper: Base64 to Blob
   const base64ToBlob = async (base64) => {
     const res = await fetch(base64);
     return await res.blob();
   };
 
-  // Compression Helpers
-  async function compressString(string) {
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode(string));
-        controller.close();
-      },
-    });
-    const compressedStream = stream.pipeThrough(new CompressionStream("gzip"));
-    const chunks = [];
-    for await (const chunk of compressedStream) {
-      chunks.push(chunk);
-    }
-    return new Blob(chunks, { type: "application/gzip" });
-  }
+  // Binary Packager: Creates a .patata binary package
+  const createBinaryPackage = async (folder) => {
+    const manifest = {
+      title: folder.title,
+      items: [],
+      coverSize: 0,
+    };
+    const blobs = [];
 
-  async function decompressString(blob) {
-    const stream = blob.stream().pipeThrough(new DecompressionStream("gzip"));
-    const reader = stream.getReader();
-    let decompressed = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      decompressed += new TextDecoder().decode(value);
+    if (folder.coverId) {
+      const b = await getFromDB(folder.coverId);
+      if (b) {
+        manifest.coverSize = b.size;
+        blobs.push(b);
+      }
     }
-    return decompressed;
-  }
 
-  // Shared Import Logic
-  const importFolderFromJson = async (jsonString) => {
+    for (const item of folder.content) {
+      const mItem = { ...item };
+      if (item.fileId) {
+        const b = await getFromDB(item.fileId);
+        if (b) {
+          mItem.fileSize = b.size;
+          blobs.push(b);
+        }
+      }
+      manifest.items.push(mItem);
+    }
+
+    const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
+    const header = new ArrayBuffer(4);
+    new DataView(header).setUint32(0, manifestBytes.byteLength);
+
+    const rawBlob = new Blob([header, manifestBytes, ...blobs]);
+    const compressedStream = rawBlob.stream().pipeThrough(new CompressionStream("gzip"));
+    return await new Response(compressedStream).blob();
+  };
+
+  // Binary Unpackager: Reads a .patata binary package
+  const unpackBinaryPackage = async (gzipBlob) => {
     try {
-      const importedFolderData = JSON.parse(jsonString);
-      
-      // Create new folder (preserving original title)
+      const decompressedStream = gzipBlob.stream().pipeThrough(new DecompressionStream("gzip"));
+      const rawBlob = await new Response(decompressedStream).blob();
+
+      const headerBlob = rawBlob.slice(0, 4);
+      const headerBuf = await headerBlob.arrayBuffer();
+      const manifestLen = new DataView(headerBuf).getUint32(0);
+
+      const manifestBlob = rawBlob.slice(4, 4 + manifestLen);
+      const manifestText = await manifestBlob.text();
+      const manifest = JSON.parse(manifestText);
+
       const newFolder = {
         id: Date.now(),
-        title: importedFolderData.title || "Carpeta Importada",
+        title: manifest.title || "Carpeta Importada",
         content: [],
         coverId: null,
       };
 
-      // Handle cover
-      if (importedFolderData.coverData) {
-        const blob = await base64ToBlob(importedFolderData.coverData);
+      let offset = 4 + manifestLen;
+
+      if (manifest.coverSize > 0) {
+        const coverBlob = rawBlob.slice(offset, offset + manifest.coverSize);
+        offset += manifest.coverSize;
         const coverId = `cov_${newFolder.id}_${Date.now()}`;
-        await saveInDB(coverId, blob);
+        await saveInDB(coverId, coverBlob);
         newFolder.coverId = coverId;
       }
 
-      // Handle items
-      for (const item of importedFolderData.content) {
-        const newItem = { ...item };
-        delete newItem.fileData; // clean up
-        if (item.fileData) {
-          const blob = await base64ToBlob(item.fileData);
+      for (const mItem of manifest.items) {
+        const item = { ...mItem };
+        if (mItem.fileSize > 0) {
+          const fileBlob = rawBlob.slice(offset, offset + mItem.fileSize);
+          offset += mItem.fileSize;
           const fileId = `file_${Date.now()}_${Math.random()}`;
-          await saveInDB(fileId, blob);
-          newItem.fileId = fileId;
+          await saveInDB(fileId, fileBlob);
+          item.fileId = fileId;
         }
-        newFolder.content.push(newItem);
+        newFolder.content.push(item);
       }
 
       folders.push(newFolder);
@@ -545,87 +562,72 @@ document.addEventListener("DOMContentLoaded", () => {
       await renderGrid();
       return true;
     } catch (e) {
-      console.error("Import Error:", e);
+      console.error("Unpack Error:", e);
       return false;
     }
   };
 
-  // Export Workflow
+  // Export Button Handler
   exportFolderBtn.addEventListener("click", async () => {
     if (!activeFolderId) return;
     const folder = folders.find((f) => f.id === activeFolderId);
     if (!folder) return;
 
-    alert("Preparando para compartir... esto puede tardar un momento si hay archivos grandes.");
+    alert("Generando paquete para compartir... ¡Es más rápido y ligero!");
 
-    const exportableFolder = {
-      title: folder.title,
-      content: [],
-      coverData: null,
-    };
+    try {
+      const packageBlob = await createBinaryPackage(folder);
+      exportModal.classList.remove("hidden");
 
-    if (folder.coverId) {
-      const coverBlob = await getFromDB(folder.coverId);
-      if (coverBlob) exportableFolder.coverData = await blobToBase64(coverBlob);
-    }
-
-    for (const item of folder.content) {
-      const newItem = { ...item };
-      if (item.fileId) {
-        const blob = await getFromDB(item.fileId);
-        if (blob) newItem.fileData = await blobToBase64(blob);
+      if (packageBlob.size < 5 * 1024 * 1024) {
+        const base64 = await blobToBase64(packageBlob);
+        exportDataEl.value = base64.substring(base64.indexOf(",") + 1);
+        copyExportCodeBtn.disabled = false;
+        copyExportCodeBtn.textContent = "Copiar Código";
+      } else {
+        exportDataEl.value = "--- Esta carpeta es demasiado grande para un código textual. Por favor, usa el botón de 'Descargar Archivo' de abajo para compartirla con seguridad. ---";
+        copyExportCodeBtn.disabled = true;
+        copyExportCodeBtn.textContent = "Usa Descarga";
       }
-      exportableFolder.content.push(newItem);
-    }
 
-    const jsonString = JSON.stringify(exportableFolder);
-    const compressedBlob = await compressString(jsonString);
-    
-    // Update Text Area (Base64)
-    const base64 = await blobToBase64(compressedBlob);
-    const finalCode = base64.substring(base64.indexOf(",") + 1);
-    exportDataEl.value = finalCode;
-
-    // Set up download button
-    downloadShareFileBtn.onclick = () => {
-        const url = URL.createObjectURL(compressedBlob);
+      downloadShareFileBtn.onclick = () => {
+        const url = URL.createObjectURL(packageBlob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${folder.title.replace(/\s+/g, '_')}.patata`;
+        a.download = `${folder.title.replace(/\s+/g, "_")}.patata`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    };
-
-    exportModal.classList.remove("hidden");
+      };
+    } catch (err) {
+      console.error(err);
+      alert("Error al preparar la carpeta.");
+    }
   });
 
-  // Import Workflow
+  // Import Button Handler
   importFolderBtn.addEventListener("click", () => {
     importModal.classList.remove("hidden");
   });
 
   executeImportBtn.addEventListener("click", async () => {
     const code = importDataEl.value.trim();
-    if (!code) {
-      alert("Por favor, pega un código o sube un archivo.");
+    if (!code || code.startsWith("---")) {
+      alert("Por favor, pega un código válido.");
       return;
     }
 
-    alert("Procesando código...");
     try {
       const blob = await base64ToBlob("data:application/gzip;base64," + code);
-      const json = await decompressString(blob);
-      const success = await importFolderFromJson(json);
+      const success = await unpackBinaryPackage(blob);
       if (success) {
         alert("¡Carpeta importada con éxito!");
         importModal.classList.add("hidden");
         importDataEl.value = "";
       } else {
-        alert("El código no es válido.");
+        alert("El código es inválido.");
       }
-    } catch (error) {
+    } catch (e) {
       alert("Error al procesar el código.");
     }
   });
@@ -634,18 +636,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    alert("Procesando archivo...");
     try {
-      const json = await decompressString(file);
-      const success = await importFolderFromJson(json);
+      const success = await unpackBinaryPackage(file);
       if (success) {
-        alert("¡Carpeta importada con éxito!");
+        alert("¡Archivo importado con éxito!");
         importModal.classList.add("hidden");
         importFileEl.value = "";
       } else {
         alert("El archivo no es válido.");
       }
-    } catch (error) {
+    } catch (e) {
       alert("Error al procesar el archivo.");
     }
   };
@@ -657,7 +657,7 @@ document.addEventListener("DOMContentLoaded", () => {
   copyExportCodeBtn.onclick = () => {
     exportDataEl.select();
     document.execCommand("copy");
-    alert("¡Código copiado al portapapeles!");
+    alert("¡Código copiado!");
   };
 
   init();

@@ -447,9 +447,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  /* --- ENCRYPTION/DECRYPTION LOGIC --- */
+  /* --- COMPRESSION-BASED SHARING LOGIC --- */
 
-  // New Elements
+  // Elements
   const importFolderBtn = document.getElementById("importFolderBtn");
   const exportFolderBtn = document.getElementById("exportFolderBtn");
   const importModal = document.getElementById("importModal");
@@ -458,31 +458,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const closeExportModalBtn = document.getElementById("closeExportModalBtn");
   const executeImportBtn = document.getElementById("executeImportBtn");
   const copyExportCodeBtn = document.getElementById("copyExportCodeBtn");
+  const downloadShareFileBtn = document.getElementById("downloadShareFileBtn");
   const exportDataEl = document.getElementById("exportData");
   const importDataEl = document.getElementById("importData");
-  const importAuthorNameEl = document.getElementById("importAuthorName");
+  const importFileEl = document.getElementById("importFile");
 
-  // Crypto Helpers
-  const arrayBufferToBase64 = (buffer) => {
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-  };
-
-  const base64ToArrayBuffer = (base64) => {
-    const binary_string = window.atob(base64);
-    const len = binary_string.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binary_string.charCodeAt(i);
-    }
-    return bytes.buffer;
-  };
-
+  // Conversion Helpers
   const blobToBase64 = (blob) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -494,106 +475,129 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const base64ToBlob = async (base64) => {
     const res = await fetch(base64);
-    const blob = await res.blob();
-    return blob;
+    return await res.blob();
   };
 
-  const deriveKey = async (password, salt) => {
-    const encoder = new TextEncoder();
-    const keyMaterial = await window.crypto.subtle.importKey(
-      "raw",
-      encoder.encode(password),
-      { name: "PBKDF2" },
-      false,
-      ["deriveKey"],
-    );
-    return window.crypto.subtle.deriveKey(
-      {
-        name: "PBKDF2",
-        salt: salt,
-        iterations: 100000,
-        hash: "SHA-256",
+  // Compression Helpers
+  async function compressString(string) {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(string));
+        controller.close();
       },
-      keyMaterial,
-      { name: "AES-GCM", length: 256 },
-      true,
-      ["encrypt", "decrypt"],
-    );
-  };
+    });
+    const compressedStream = stream.pipeThrough(new CompressionStream("gzip"));
+    const chunks = [];
+    for await (const chunk of compressedStream) {
+      chunks.push(chunk);
+    }
+    return new Blob(chunks, { type: "application/gzip" });
+  }
 
-  const encryptData = async (key, data) => {
-    const encoder = new TextEncoder();
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const encryptedContent = await window.crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: iv },
-      key,
-      encoder.encode(data),
-    );
-    // Pack iv and ciphertext together
-    const packed = new Uint8Array(iv.length + encryptedContent.byteLength);
-    packed.set(iv, 0);
-    packed.set(new Uint8Array(encryptedContent), iv.length);
-    return arrayBufferToBase64(packed);
-  };
+  async function decompressString(blob) {
+    const stream = blob.stream().pipeThrough(new DecompressionStream("gzip"));
+    const reader = stream.getReader();
+    let decompressed = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      decompressed += new TextDecoder().decode(value);
+    }
+    return decompressed;
+  }
 
-  const decryptData = async (key, encryptedBase64) => {
-    const decoder = new TextDecoder();
+  // Shared Import Logic
+  const importFolderFromJson = async (jsonString) => {
     try {
-      const packed = base64ToArrayBuffer(encryptedBase64);
-      const iv = packed.slice(0, 12);
-      const encryptedContent = packed.slice(12);
+      const importedFolderData = JSON.parse(jsonString);
+      
+      // Create new folder (preserving original title)
+      const newFolder = {
+        id: Date.now(),
+        title: importedFolderData.title || "Carpeta Importada",
+        content: [],
+        coverId: null,
+      };
 
-      const decryptedContent = await window.crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: iv },
-        key,
-        encryptedContent,
-      );
-      return decoder.decode(decryptedContent);
+      // Handle cover
+      if (importedFolderData.coverData) {
+        const blob = await base64ToBlob(importedFolderData.coverData);
+        const coverId = `cov_${newFolder.id}_${Date.now()}`;
+        await saveInDB(coverId, blob);
+        newFolder.coverId = coverId;
+      }
+
+      // Handle items
+      for (const item of importedFolderData.content) {
+        const newItem = { ...item };
+        delete newItem.fileData; // clean up
+        if (item.fileData) {
+          const blob = await base64ToBlob(item.fileData);
+          const fileId = `file_${Date.now()}_${Math.random()}`;
+          await saveInDB(fileId, blob);
+          newItem.fileId = fileId;
+        }
+        newFolder.content.push(newItem);
+      }
+
+      folders.push(newFolder);
+      save();
+      await renderGrid();
+      return true;
     } catch (e) {
-      console.error("Decryption failed:", e);
-      return null;
+      console.error("Import Error:", e);
+      return false;
     }
   };
 
   // Export Workflow
   exportFolderBtn.addEventListener("click", async () => {
-    if (!activeFolderId || !currentUser) return;
+    if (!activeFolderId) return;
     const folder = folders.find((f) => f.id === activeFolderId);
     if (!folder) return;
 
-    alert("Encriptando... esto puede tardar un momento.");
+    alert("Preparando para compartir... esto puede tardar un momento si hay archivos grandes.");
 
     const exportableFolder = {
       title: folder.title,
       content: [],
+      coverData: null,
     };
 
-    // Deep copy and convert blobs to base64
+    if (folder.coverId) {
+      const coverBlob = await getFromDB(folder.coverId);
+      if (coverBlob) exportableFolder.coverData = await blobToBase64(coverBlob);
+    }
+
     for (const item of folder.content) {
       const newItem = { ...item };
       if (item.fileId) {
         const blob = await getFromDB(item.fileId);
-        if (blob) {
-          newItem.fileData = await blobToBase64(blob);
-        }
-      }
-      if (item.coverId) {
-        const blob = await getFromDB(item.coverId);
-        if (blob) {
-          newItem.coverData = await blobToBase64(blob);
-        }
+        if (blob) newItem.fileData = await blobToBase64(blob);
       }
       exportableFolder.content.push(newItem);
     }
 
-    // Use username as salt for key derivation
-    const salt = new TextEncoder().encode(currentUser);
-    const key = await deriveKey(currentUser, salt);
     const jsonString = JSON.stringify(exportableFolder);
-    const encrypted = await encryptData(key, jsonString);
-
-    const finalCode = `${encrypted}::${currentUser}`;
+    const compressedBlob = await compressString(jsonString);
+    
+    // Update Text Area (Base64)
+    const base64 = await blobToBase64(compressedBlob);
+    const finalCode = base64.substring(base64.indexOf(",") + 1);
     exportDataEl.value = finalCode;
+
+    // Set up download button
+    downloadShareFileBtn.onclick = () => {
+        const url = URL.createObjectURL(compressedBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${folder.title.replace(/\s+/g, '_')}.patata`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     exportModal.classList.remove("hidden");
   });
 
@@ -604,89 +608,52 @@ document.addEventListener("DOMContentLoaded", () => {
 
   executeImportBtn.addEventListener("click", async () => {
     const code = importDataEl.value.trim();
-    const author = importAuthorNameEl.value.trim();
-
-    if (!code || !author) {
-      alert("Por favor, completa todos los campos.");
+    if (!code) {
+      alert("Por favor, pega un código o sube un archivo.");
       return;
     }
 
-    const parts = code.split("::");
-    if (parts.length !== 2) {
-      alert("El código de importación no es válido.");
-      return;
-    }
-
-    const [encryptedBase64, originalAuthor] = parts;
-    if (author !== originalAuthor) {
-      alert(
-        "El nombre del autor no coincide con el del código. Acceso denegado.",
-      );
-      return;
-    }
-
-    alert("Desencriptando e importando... esto puede tardar.");
-
+    alert("Procesando código...");
     try {
-      const salt = new TextEncoder().encode(author);
-      const key = await deriveKey(author, salt);
-      const decryptedJson = await decryptData(key, encryptedBase64);
-
-      if (!decryptedJson) {
-        alert(
-          "La desencriptación ha fallado. La clave (nombre de autor) podría ser incorrecta o los datos están corruptos.",
-        );
-        return;
+      const blob = await base64ToBlob("data:application/gzip;base64," + code);
+      const json = await decompressString(blob);
+      const success = await importFolderFromJson(json);
+      if (success) {
+        alert("¡Carpeta importada con éxito!");
+        importModal.classList.add("hidden");
+        importDataEl.value = "";
+      } else {
+        alert("El código no es válido.");
       }
-
-      const importedFolderData = JSON.parse(decryptedJson);
-
-      // Create new folder
-      const newFolder = {
-        id: Date.now(),
-        title: importedFolderData.title + " (Importado)",
-        content: [],
-        coverId: null,
-      };
-
-      for (const item of importedFolderData.content) {
-        const newItem = { ...item };
-        delete newItem.fileData; // clean up
-        delete newItem.coverData;
-
-        if (item.fileData) {
-          const blob = await base64ToBlob(item.fileData);
-          const fileId = `file_${Date.now()}_${Math.random()}`;
-          await saveInDB(fileId, blob);
-          newItem.fileId = fileId;
-        }
-        if (item.coverData) {
-          const blob = await base64ToBlob(item.coverData);
-          const coverId = `cov_${newFolder.id}_${Date.now()}`;
-          await saveInDB(coverId, blob);
-          newFolder.coverId = coverId;
-        }
-        newFolder.content.push(newItem);
-      }
-
-      folders.push(newFolder);
-      save();
-      await renderGrid();
-      alert("¡Carpeta importada con éxito!");
-      importModal.classList.add("hidden");
-      importDataEl.value = "";
-      importAuthorNameEl.value = "";
     } catch (error) {
-      console.error("Import process error:", error);
-      alert(
-        "Ha ocurrido un error durante la importación. Revisa la consola para más detalles.",
-      );
+      alert("Error al procesar el código.");
     }
   });
+
+  importFileEl.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    alert("Procesando archivo...");
+    try {
+      const json = await decompressString(file);
+      const success = await importFolderFromJson(json);
+      if (success) {
+        alert("¡Carpeta importada con éxito!");
+        importModal.classList.add("hidden");
+        importFileEl.value = "";
+      } else {
+        alert("El archivo no es válido.");
+      }
+    } catch (error) {
+      alert("Error al procesar el archivo.");
+    }
+  };
 
   // Modal controls
   closeImportModalBtn.onclick = () => importModal.classList.add("hidden");
   closeExportModalBtn.onclick = () => exportModal.classList.add("hidden");
+
   copyExportCodeBtn.onclick = () => {
     exportDataEl.select();
     document.execCommand("copy");
@@ -695,3 +662,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
   init();
 });
+

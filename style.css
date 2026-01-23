@@ -1,15 +1,16 @@
 :root {
+    /* Base Dark/Green Theme */
     --bg-dark: #050f0a;
-    /* Dark Green-Black Base */
     --sidebar-bg: rgba(10, 30, 20, 0.95);
-    --content-bg: rgba(15, 25, 20, 0.85);
 
+    /* Accents */
     --primary-purple: #8b2df0;
     --primary-purple-glow: rgba(139, 45, 240, 0.4);
 
     --neon-green: #00ffaa;
     --neon-green-glow: rgba(0, 255, 170, 0.3);
 
+    /* Text */
     --text-light: #f0faff;
     --text-dim: #b0d0c0;
 
@@ -24,7 +25,6 @@
 }
 
 body {
-    /* Very Dark Green Gradient Background */
     background: radial-gradient(circle at top right, #0a2015 0%, #050f0a 60%);
     color: var(--text-light);
     height: 100vh;
@@ -44,6 +44,7 @@ body {
     justify-content: space-between;
     padding: 0 25px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    z-index: 100;
 }
 
 .app-title {
@@ -63,7 +64,7 @@ body {
     border: 1px solid rgba(139, 45, 240, 0.2);
 }
 
-/* MAIN AREA */
+/* MAIN GRID AREA */
 .desktop-area {
     flex: 1;
     padding: 40px;
@@ -122,7 +123,7 @@ body {
     font-weight: 600;
 }
 
-/* FOLDER STYLE - Layered */
+/* FOLDER ITEM (Layered) */
 .folder-container {
     width: 130px;
     display: flex;
@@ -138,6 +139,7 @@ body {
     transform: scale(1.05) translateY(-5px);
 }
 
+/* Graphic part */
 .folder-graphic {
     width: 120px;
     height: 90px;
@@ -146,7 +148,7 @@ body {
     perspective: 500px;
 }
 
-/* Back Plate: Deep Purple */
+/* Back Plate */
 .folder-back {
     position: absolute;
     top: 0;
@@ -170,14 +172,17 @@ body {
     border-radius: 8px 8px 0 0;
 }
 
-/* Stack Items */
+/* Items inside (Stack) - VISIBILITY FIX */
 .items-stack {
     position: absolute;
-    bottom: 8px;
+    bottom: 5px;
+    /* Sit at bottom */
     left: 10px;
     right: 10px;
-    height: 60px;
+    height: 100%;
+    /* Take full height to allow peeking */
     z-index: 5;
+    /* Between Back (1) and Front (10) */
     display: flex;
     justify-content: center;
     align-items: flex-end;
@@ -185,32 +190,38 @@ body {
 }
 
 .paper-preview {
-    width: 90%;
-    height: 80%;
+    width: 85%;
+    height: 90%;
+    /* Taller than the front plate (which is 75%) */
+    max-height: 95px;
+    /* Hard limit */
     background: #e0f2f1;
     border: 1px solid #004d40;
     position: absolute;
-    bottom: 0;
+    bottom: 5px;
     border-radius: 4px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.2);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
+    /* Align icon to top */
+    padding-top: 10px;
     justify-content: center;
     font-size: 1.5rem;
     color: #333;
     overflow: hidden;
     background-size: cover;
-    background-position: center;
+    background-position: top center;
     transition: transform 0.3s;
 }
 
-/* Front Plate: Lighter Purple with Green Glow */
+/* Front Plate */
 .folder-front {
     position: absolute;
     bottom: 0;
     left: 0;
     width: 100%;
-    height: 75%;
+    height: 70%;
+    /* Reduced height slightly to reveal more paper */
     background: linear-gradient(135deg, #7c43bd, #673ab7);
     border-radius: 0 0 10px 10px;
     z-index: 10;
@@ -229,8 +240,8 @@ body {
 }
 
 .folder-container:hover .folder-front {
-    transform: rotateX(15deg);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    transform: rotateX(25deg);
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.6);
 }
 
 /* Label */
@@ -253,7 +264,7 @@ body {
     outline: none;
 }
 
-/* OVERLAY */
+/* OVERLAYS */
 .overlay {
     position: fixed;
     top: 0;
@@ -283,37 +294,42 @@ body {
     display: none !important;
 }
 
-/* Global Close */
+/* GLOBAL CLOSE BUTTON - INCREASED VISIBILITY & SIZE */
 .global-close-btn {
     position: absolute;
-    top: 15px;
-    right: 15px;
-    z-index: 100;
-    font-size: 2rem;
-    background: transparent;
+    top: 20px;
+    right: 20px;
+    z-index: 2000;
+    font-size: 2.5rem;
+    background: rgba(0, 0, 0, 0.5);
     color: #fff;
-    opacity: 0.6;
-    border: none;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
     cursor: pointer;
-    transition: 0.2s;
-    width: 40px;
-    height: 40px;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    width: 50px;
+    height: 50px;
     display: flex;
     align-items: center;
     justify-content: center;
+    line-height: 0;
+    padding-bottom: 5px;
+    /* Visual alignment fix for &times; */
 }
 
 .global-close-btn:hover {
-    opacity: 1;
-    color: #ff5555;
-    transform: rotate(90deg);
+    background: #ff5555;
+    color: white;
+    border-color: #ff5555;
+    transform: rotate(90deg) scale(1.1);
+    box-shadow: 0 0 20px rgba(255, 85, 85, 0.5);
 }
 
+/* WINDOW LAYOUT (Sidebar + Content) */
 .folder-window-layout {
     width: 85vw;
     height: 85vh;
     max-width: 1200px;
-    /* Dark Greenish window background */
     background: linear-gradient(160deg, #0e1e18, #050f0a);
     border-radius: 20px;
     position: relative;
@@ -345,20 +361,19 @@ body {
     gap: 10px;
 }
 
-/* Sidebar Navigation - SCROLLABLE */
+/* Sidebar Nav + Scroll */
 .sidebar-nav {
     flex: 1;
     padding: 20px;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    /* Enable Scroll */
     overflow-y: auto;
     min-height: 0;
-    /* Crucial for flex box scrolling */
+    /* Enable scroll */
 }
 
-/* Custom Scrollbar for Sidebar */
+/* Scrollbar */
 .sidebar-nav::-webkit-scrollbar {
     width: 6px;
 }
@@ -371,11 +386,6 @@ body {
     background: rgba(0, 255, 170, 0.2);
     border-radius: 3px;
 }
-
-.sidebar-nav::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 255, 170, 0.4);
-}
-
 
 .sidebar-item {
     display: flex;
@@ -391,7 +401,6 @@ body {
     text-align: left;
     transition: 0.2s;
     flex-shrink: 0;
-    /* Prevent squishing */
 }
 
 .sidebar-item:hover {
@@ -533,7 +542,7 @@ body {
     background: #ff5555;
 }
 
-/* Audio Wrapper & Modal Card */
+/* Audio Thumbnails Styles */
 .audio-wrapper {
     width: 100%;
     display: flex;
@@ -560,6 +569,7 @@ body {
     width: 100%;
 }
 
+/* Modal User Card */
 .modal-card {
     background: linear-gradient(145deg, #0e1e18, #050f0a);
     padding: 50px;

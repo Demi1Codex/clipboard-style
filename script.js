@@ -1,4 +1,6 @@
-/* DB */
+/* Patata Clipboard V2 - Final Polish */
+
+/* --- DATABASE --- */
 const dbName = 'PatataDB_V2';
 const storeName = 'mediaStore';
 
@@ -121,7 +123,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const clone = folderTemplate.content.cloneNode(true);
             const el = clone.querySelector('.folder-container');
             const nameEl = clone.querySelector('.folder-name');
-            const front = clone.querySelector('.folder-front');
             const coverImg = clone.querySelector('.cover-image');
             const stack = clone.querySelector('.items-stack');
 
@@ -140,7 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (e) { }
             }
 
-            // Load Stack Preview Items (First 3)
+            // Stack Preview (Logic Improved for Visibility)
             if (f.content && f.content.length > 0) {
                 const itemsToShow = f.content.slice(0, 3);
                 for (let i = 0; i < itemsToShow.length; i++) {
@@ -148,29 +149,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     const paper = document.createElement('div');
                     paper.className = 'paper-preview';
 
-                    // Simple styling
                     if (item.type === 'text') {
                         paper.classList.add('text-paper');
-                        paper.textContent = '📄';
+                        paper.innerHTML = '<span style="font-size:1.2rem">📄</span>';
                     } else if (item.type === 'image' && item.fileId) {
-                        // Async load visual
                         getFromDB(item.fileId).then(blob => {
                             if (blob) {
                                 paper.style.backgroundImage = `url(${URL.createObjectURL(blob)})`;
                                 paper.classList.add('media-paper');
                             }
                         });
-                    } else if (item.type === 'video') {
-                        paper.textContent = '🎥';
                     } else {
-                        paper.textContent = '🎵';
+                        paper.innerHTML = item.type === 'video' ? '🎥' : '🎵';
                     }
 
-                    // Stagger transform
+                    // Improved Centering & Rotation
                     const rot = (Math.random() * 10 - 5);
-                    const tx = (Math.random() * 6 - 3);
-                    paper.style.transform = `rotate(${rot}deg) translateX(${tx}px)`;
-                    paper.style.bottom = `${10 + (i * 4)}px`; // Stack vertically slightly
+                    paper.style.transform = `translateX(-50%) rotate(${rot}deg)`;
+                    paper.style.left = '50%'; // Center
+                    paper.style.bottom = `${i * 3}px`; // Slight vertical stack
                     paper.style.zIndex = i;
 
                     stack.appendChild(paper);
@@ -184,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // Global Click Delegation (Robust)
     grid.addEventListener('click', (e) => {
         const card = e.target.closest('.folder-container');
         if (card && !e.target.classList.contains('folder-name')) {
@@ -207,7 +205,6 @@ document.addEventListener('DOMContentLoaded', () => {
         modalTitle.textContent = f.title;
         modal.classList.remove('hidden');
 
-        // Show/Hide Remove Cover Btn
         if (f.coverId) tools.removeCover.classList.remove('hidden');
         else tools.removeCover.classList.add('hidden');
 
@@ -224,6 +221,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderContent = async (f) => {
         contentArea.innerHTML = '';
 
+        if (!f.content || f.content.length === 0) {
+            contentArea.innerHTML = `<div style="width:100%; text-align:center; color:rgba(255,255,255,0.2); margin-top:50px;">
+                <div style="font-size:3rem; margin-bottom:10px">📭</div>
+                Carpeta vacía
+            </div>`;
+            return;
+        }
+
         for (let i = 0; i < f.content.length; i++) {
             const item = f.content[i];
             const div = document.createElement('div');
@@ -232,6 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let html = `<span>${item.type}</span>`;
 
             if (item.type === 'text') {
+                // Ensure text is readable
                 html = `<p>${item.text}</p>`;
             } else if (item.fileId) {
                 const blob = await getFromDB(item.fileId);
@@ -279,7 +285,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Tools ---
 
-    // Remove Cover Logic
     tools.removeCover.onclick = async () => {
         const f = folders.find(x => x.id === activeFolderId);
         if (f && f.coverId) {

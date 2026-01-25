@@ -660,6 +660,39 @@ document.addEventListener("DOMContentLoaded", () => {
     alert("¡Código copiado!");
   };
 
+  // --- External Permission Listener ---
+  // Escucha mensajes de la página oficial para crear o abrir carpetas
+  window.addEventListener("message", async (event) => {
+    // Solo permitimos mensajes de la fuente oficial
+    if (!event.origin.startsWith("https://demi1codex.github.io")) return;
+
+    const { type, folderName, name } = event.data || {};
+    const targetName = folderName || name || (typeof event.data === 'string' ? event.data : null);
+
+    if (targetName) {
+      // Buscar si ya existe una carpeta con ese nombre
+      const existing = folders.find((f) => f.title === targetName);
+
+      if (existing) {
+        // Si existe, simplemente la abrimos
+        openManager(existing.id);
+        console.log(`[Patata] Carpeta "${targetName}" ya existe. Abriendo...`);
+      } else {
+        // Si no existe, la creamos y luego la abrimos
+        const newFolder = {
+          id: Date.now(),
+          title: targetName,
+          content: [],
+        };
+        folders.push(newFolder);
+        save();
+        await renderGrid();
+        openManager(newFolder.id);
+        console.log(`[Patata] Nueva carpeta "${targetName}" creada y abierta.`);
+      }
+    }
+  });
+
   init();
 });
 

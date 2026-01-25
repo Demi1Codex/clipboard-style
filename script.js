@@ -123,6 +123,22 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       document.getElementById("userDisplay").textContent = currentUser;
     }
+
+    // --- Auto-create folder from URL "idea" parameter ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const ideaName = urlParams.get('idea');
+    if (ideaName) {
+      const existing = folders.find(f => f.title.toLowerCase() === ideaName.toLowerCase());
+      if (!existing) {
+        folders.push({
+          id: Date.now(),
+          title: ideaName,
+          content: []
+        });
+        save();
+      }
+    }
+
     renderGrid();
   };
 

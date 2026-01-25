@@ -124,19 +124,29 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("userDisplay").textContent = currentUser;
     }
 
-    // --- Auto-create folder from URL "idea" parameter ---
+    // --- Auto-create folder from URL "folderName" parameter ---
     const urlParams = new URLSearchParams(window.location.search);
-    const ideaName = urlParams.get('idea');
-    if (ideaName) {
-      const existing = folders.find(f => f.title.toLowerCase() === ideaName.toLowerCase());
-      if (!existing) {
-        folders.push({
+    const rawFolderName = urlParams.get('folderName');
+
+    if (rawFolderName) {
+      // DecodeURIComponent maneja automáticamente los %20 y caracteres especiales
+      const folderTitle = decodeURIComponent(rawFolderName);
+
+      let targetFolder = folders.find(f => f.title.toLowerCase() === folderTitle.toLowerCase());
+
+      if (!targetFolder) {
+        targetFolder = {
           id: Date.now(),
-          title: ideaName,
+          title: folderTitle,
           content: []
-        });
+        };
+        folders.push(targetFolder);
         save();
+        console.log(`[Patata] Carpeta creada desde URL: ${folderTitle}`);
       }
+
+      // Abrir la carpeta automáticamente al detectarla en la URL
+      setTimeout(() => openManager(targetFolder.id), 100);
     }
 
     renderGrid();

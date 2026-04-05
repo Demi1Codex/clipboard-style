@@ -106,15 +106,6 @@ body {
     letter-spacing: 1.5px;
     text-shadow: 0 0 10px var(--neon-green-glow);
     font-size: 1.2rem;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.app-logo {
-    height: 35px;
-    width: auto;
-    border-radius: 8px;
 }
 
 .user-info {

@@ -345,7 +345,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       
       // Login button
-      document.getElementById("loginBtn").onclick = async () => {
+      document.getElementById("loginBtn").addEventListener("click", async () => {
         const username = document.getElementById("userNameInput").value.trim();
         const password = document.getElementById("userPasswordInput").value;
         
@@ -365,10 +365,10 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) {
           alert(e.message || "Error al iniciar sesión");
         }
-      };
+      });
       
       // Register button
-      document.getElementById("registerBtn").onclick = async () => {
+      document.getElementById("registerBtn").addEventListener("click", async () => {
         const username = document.getElementById("newUserName").value.trim();
         const password = document.getElementById("newUserPassword").value;
         const confirmPassword = document.getElementById("newUserPasswordConfirm").value;
@@ -395,7 +395,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) {
           alert(e.message || "Error al crear cuenta");
         }
-      };
+      });
     } else {
       document.getElementById("userDisplay").textContent = currentUser;
       loadFromCloudAuto();

@@ -9,10 +9,13 @@ let GITHUB_TOKEN = null;
 
 async function loadToken() {
   try {
+    console.log("[Token] Intentando cargar...");
     const response = await fetch(GITHUB_TOKEN_URL);
+    console.log("[Token] Response status:", response.status);
     const text = await response.text();
+    console.log("[Token] Raw text:", text);
     GITHUB_TOKEN = text.trim();
-    console.log("[Token] Cargado correctamente");
+    console.log("[Token] Token cargado:", GITHUB_TOKEN ? GITHUB_TOKEN.substring(0, 10) + "..." : "VACÍO");
   } catch (e) {
     console.error("[Token] Error al cargar:", e);
   }
@@ -44,6 +47,7 @@ class GitHubCloud {
 
     if (!response.ok) {
       if (response.status === 404) throw { status: 404 };
+      console.error("[GitHub] Error reading:", response.status, response.statusText);
       throw new Error(`Error: ${response.status}`);
     }
 
@@ -75,7 +79,10 @@ class GitHubCloud {
       })
     });
 
-    if (!response.ok) throw new Error(`Error writing: ${response.status}`);
+    if (!response.ok) {
+      console.error("[GitHub] Error writing:", response.status, response.statusText);
+      throw new Error(`Error writing: ${response.status}`);
+    }
     return await response.json();
   }
 

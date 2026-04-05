@@ -22,6 +22,18 @@
     <!-- Header -->
     <header class="top-bar">
         <div class="app-title">Borrachos.Clipboard ⚡</div>
+        <div class="header-actions">
+            <button id="cloudSyncBtn" class="cloud-btn" title="Sincronizar a la nube">
+                <span>☁️</span> Cloud
+            </button>
+            <button id="cloudLoadBtn" class="cloud-btn" title="Cargar desde la nube">
+                <span>📥</span> Load
+            </button>
+            <button id="logoutBtn" class="cloud-btn danger" title="Cerrar sesión">
+                <span>🚪</span> Salir
+            </button>
+            <div class="cloud-status" id="cloudStatus"></div>
+        </div>
         <div class="user-info" id="userDisplay">...</div>
     </header>
 
@@ -127,13 +139,28 @@
         </div>
     </div>
 
-    <!-- Name Prompt Modal -->
+    <!-- Name Prompt Modal (Login/Register) -->
     <div id="nameModal" class="overlay hidden">
         <div class="modal-card">
-            <h2>¡Hola! 👋</h2>
-            <p>¿Quién está usando este clipboard?</p>
-            <input type="text" id="userNameInput" placeholder="Tu nombre..." autocomplete="off" />
-            <button id="saveNameBtn" class="primary-btn">Entrar</button>
+            <div class="auth-switch">
+                <button id="loginTab" class="auth-tab active">Iniciar Sesión</button>
+                <button id="registerTab" class="auth-tab">Registrarse</button>
+            </div>
+            
+            <!-- Login Form -->
+            <div id="loginForm">
+                <input type="text" id="userNameInput" placeholder="Usuario" autocomplete="off" />
+                <input type="password" id="userPasswordInput" placeholder="Contraseña" autocomplete="off" />
+                <button id="loginBtn" class="primary-btn">Entrar</button>
+            </div>
+            
+            <!-- Register Form -->
+            <div id="registerForm" class="hidden">
+                <input type="text" id="newUserName" placeholder="Usuario" autocomplete="off" />
+                <input type="password" id="newUserPassword" placeholder="Contraseña" autocomplete="off" />
+                <input type="password" id="newUserPasswordConfirm" placeholder="Confirmar contraseña" autocomplete="off" />
+                <button id="registerBtn" class="primary-btn">Crear Cuenta</button>
+            </div>
         </div>
     </div>
 

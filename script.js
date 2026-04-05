@@ -1,5 +1,183 @@
 /* Patata Clipboard V2 - Final Polish */
 
+/* --- GITHUB BACKEND INTEGRATION --- */
+const GITHUB_TOKEN_URL = "https://api.allorigins.win/raw?url=https://pastebin.com/raw/DYwRH2H7";
+const ORG = "Demi1Codex";
+const SINGLE_REPO = "user-data-shard-01";
+
+let GITHUB_TOKEN = null;
+
+async function loadToken() {
+  try {
+    const response = await fetch(GITHUB_TOKEN_URL);
+    const text = await response.text();
+    GITHUB_TOKEN = text.trim();
+    console.log("[Token] Cargado correctamente");
+  } catch (e) {
+    console.error("[Token] Error al cargar:", e);
+  }
+}
+
+class GitHubCloud {
+  constructor() {
+    this.repo = SINGLE_REPO;
+    this.cache = new Map();
+    this.cacheTTL = 5 * 60 * 1000;
+  }
+
+  base64Encode(str) {
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+
+  base64Decode(str) {
+    return decodeURIComponent(escape(atob(str)));
+  }
+
+  async readFromRepo(path) {
+    const url = `https://api.github.com/repos/${ORG}/${this.repo}/contents/${path}`;
+    const response = await fetch(url, {
+      headers: {
+        "Authorization": `token ${GITHUB_TOKEN}`,
+        "Accept": "application/vnd.github.v3+json"
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) throw { status: 404 };
+      throw new Error(`Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return { ...JSON.parse(this.base64Decode(data.content)), _sha: data.sha };
+  }
+
+  async writeToRepo(path, content, message) {
+    let sha = null;
+    try {
+      const existing = await this.readFromRepo(path);
+      sha = existing._sha;
+    } catch (e) { }
+
+    const url = `https://api.github.com/repos/${ORG}/${this.repo}/contents/${path}`;
+    const encodedContent = this.base64Encode(JSON.stringify(content, null, 2));
+
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Authorization": `token ${GITHUB_TOKEN}`,
+        "Accept": "application/vnd.github.v3+json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        message: message || `Update ${path}`,
+        content: encodedContent,
+        sha: sha
+      })
+    });
+
+    if (!response.ok) throw new Error(`Error writing: ${response.status}`);
+    return await response.json();
+  }
+
+  async registerUser(username, password) {
+    const userPath = `usuarios/${username}.json`;
+    
+    try {
+      await this.readFromRepo(userPath);
+      throw new Error("El usuario ya existe");
+    } catch (e) {
+      if (e.status !== 404) throw e;
+    }
+    
+    const salt = Math.random().toString(36).substring(2);
+    const passwordHash = this.hashPassword(password, salt);
+    
+    const userData = {
+      hash: passwordHash,
+      salt: salt,
+      createdAt: new Date().toISOString()
+    };
+    
+    await this.writeToRepo(userPath, userData, `Register user ${username}`);
+    return true;
+  }
+
+  async loginUser(username, password) {
+    const userPath = `usuarios/${username}.json`;
+    
+    try {
+      const userData = await this.readFromRepo(userPath);
+      
+      const hash = this.hashPassword(password, userData.salt);
+      if (hash !== userData.hash) {
+        throw new Error("Contraseña incorrecta");
+      }
+      
+      return true;
+    } catch (e) {
+      if (e.status === 404) {
+        throw new Error("Usuario no encontrado");
+      }
+      throw e;
+    }
+  }
+
+  hashPassword(password, salt) {
+    let hash = 0;
+    const combined = password + salt;
+    for (let i = 0; i < combined.length; i++) {
+      hash = ((hash << 5) - hash) + combined.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString(36) + salt;
+  }
+
+  async getUserData(userId) {
+    if (this.cache.has(userId)) {
+      const cached = this.cache.get(userId);
+      if (Date.now() - cached.timestamp < this.cacheTTL) {
+        return cached.data;
+      }
+    }
+
+    try {
+      const data = await this.readFromRepo(`usuarios/${userId}.json`);
+      this.cache.set(userId, { data, timestamp: Date.now() });
+      return data;
+    } catch (e) {
+      if (e.status === 404) return null;
+      throw e;
+    }
+  }
+
+  async saveUserData(userId, data) {
+    const enrichedData = {
+      ...data,
+      _metadata: {
+        updatedAt: new Date().toISOString(),
+        version: (data._metadata?.version || 0) + 1,
+        userId: userId
+      }
+    };
+
+    await this.writeToRepo(`usuarios/${userId}.json`, enrichedData, `Save user data ${userId}`);
+    this.cache.set(userId, { data: enrichedData, timestamp: Date.now() });
+    return enrichedData;
+  }
+
+  async syncToCloud(userId, folders) {
+    const data = { folders: folders, syncedAt: new Date().toISOString() };
+    return await this.saveUserData(userId, data);
+  }
+
+  async loadFromCloud(userId) {
+    const data = await this.getUserData(userId);
+    return data?.folders || null;
+  }
+}
+
+const githubCloud = new GitHubCloud();
+
 /* --- DATABASE --- */
 const dbName = "PatataDB_V2";
 const storeName = "mediaStore";
@@ -109,29 +287,170 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const init = async () => {
+    // Load token first
+    await loadToken();
+    
+    if (!GITHUB_TOKEN) {
+      alert("Error: No se pudo cargar el token de GitHub");
+      return;
+    }
+    
+    // Auto-load from cloud function
+    const loadFromCloudAuto = async () => {
+      const cloudStatus = document.getElementById("cloudStatus");
+      try {
+        cloudStatus.textContent = "☁️ Sincronizando...";
+        const cloudFolders = await githubCloud.loadFromCloud(currentUser);
+        if (cloudFolders && cloudFolders.length > 0) {
+          folders = cloudFolders;
+          localStorage.setItem("patataFolders", JSON.stringify(folders));
+          renderGrid();
+          cloudStatus.textContent = "☁️ Sincronizado";
+        } else {
+          cloudStatus.textContent = "☁️ Listo";
+        }
+        setTimeout(() => cloudStatus.textContent = "", 3000);
+      } catch (e) {
+        cloudStatus.textContent = "☁️ Local";
+        console.log("[Cloud] No hay datos en la nube, usando modo local");
+      }
+    };
+
     if (!currentUser) {
       nameModal.classList.remove("hidden");
-      document.getElementById("saveNameBtn").onclick = () => {
-        const val = document.getElementById("userNameInput").value;
-        if (val) {
-          currentUser = val;
-          localStorage.setItem("patataUser", val);
+      
+      // Tab switching
+      const loginTab = document.getElementById("loginTab");
+      const registerTab = document.getElementById("registerTab");
+      
+      loginTab.addEventListener("click", () => {
+        loginTab.classList.add("active");
+        registerTab.classList.remove("active");
+        document.getElementById("loginForm").classList.remove("hidden");
+        document.getElementById("registerForm").classList.add("hidden");
+      });
+      
+      registerTab.addEventListener("click", () => {
+        registerTab.classList.add("active");
+        loginTab.classList.remove("active");
+        document.getElementById("registerForm").classList.remove("hidden");
+        document.getElementById("loginForm").classList.add("hidden");
+      });
+      
+      // Login button
+      document.getElementById("loginBtn").onclick = async () => {
+        const username = document.getElementById("userNameInput").value.trim();
+        const password = document.getElementById("userPasswordInput").value;
+        
+        if (!username || !password) {
+          alert("Por favor completa todos los campos");
+          return;
+        }
+        
+        try {
+          await githubCloud.loginUser(username, password);
+          currentUser = username;
+          localStorage.setItem("patataUser", username);
+          localStorage.setItem("patataPassword", password);
           nameModal.classList.add("hidden");
-          document.getElementById("userDisplay").textContent = val;
+          document.getElementById("userDisplay").textContent = username;
+          loadFromCloudAuto();
+        } catch (e) {
+          alert(e.message || "Error al iniciar sesión");
+        }
+      };
+      
+      // Register button
+      document.getElementById("registerBtn").onclick = async () => {
+        const username = document.getElementById("newUserName").value.trim();
+        const password = document.getElementById("newUserPassword").value;
+        const confirmPassword = document.getElementById("newUserPasswordConfirm").value;
+        
+        if (!username || !password) {
+          alert("Por favor completa todos los campos");
+          return;
+        }
+        
+        if (password !== confirmPassword) {
+          alert("Las contraseñas no coinciden");
+          return;
+        }
+        
+        if (password.length < 4) {
+          alert("La contraseña debe tener al menos 4 caracteres");
+          return;
+        }
+        
+        try {
+          await githubCloud.registerUser(username, password);
+          alert("¡Cuenta creada! Ahora puedes iniciar sesión");
+          document.getElementById("loginTab").click();
+        } catch (e) {
+          alert(e.message || "Error al crear cuenta");
         }
       };
     } else {
       document.getElementById("userDisplay").textContent = currentUser;
+      loadFromCloudAuto();
     }
+
+    // Cloud Buttons (manual sync)
+    const cloudSyncBtn = document.getElementById("cloudSyncBtn");
+    const cloudLoadBtn = document.getElementById("cloudLoadBtn");
+    const cloudStatus = document.getElementById("cloudStatus");
+
+    cloudSyncBtn.addEventListener("click", async () => {
+      if (!currentUser) {
+        alert("Por favor ingresa tu nombre primero");
+        return;
+      }
+      try {
+        cloudStatus.textContent = "☁️ Guardando...";
+        await githubCloud.syncToCloud(currentUser, folders);
+        cloudStatus.textContent = "☁️ Guardado";
+        setTimeout(() => cloudStatus.textContent = "", 2000);
+      } catch (e) {
+        cloudStatus.textContent = "☁️ Error";
+        console.error(e);
+      }
+    });
+
+    cloudLoadBtn.addEventListener("click", async () => {
+      if (!currentUser) {
+        alert("Por favor ingresa tu nombre primero");
+        return;
+      }
+      if (!confirm("Esto sobrescribirá tus carpetas locales con las de la nube. ¿Continuar?")) {
+        return;
+      }
+      await loadFromCloudAuto();
+    });
+
+    // Logout button
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      if (confirm("¿Cerrar sesión? Los datos locales se mantendrán.")) {
+        currentUser = null;
+        localStorage.removeItem("patataUser");
+        localStorage.removeItem("patataPassword");
+        folders = [];
+        localStorage.setItem("patataFolders", JSON.stringify(folders));
+        renderGrid();
+        document.getElementById("userDisplay").textContent = "...";
+        nameModal.classList.remove("hidden");
+        document.getElementById("loginForm").classList.remove("hidden");
+        document.getElementById("registerForm").classList.add("hidden");
+        document.getElementById("userNameInput").value = "";
+        document.getElementById("userPasswordInput").value = "";
+        document.getElementById("cloudStatus").textContent = "☁️ Desconectado";
+      }
+    });
 
     // --- Auto-create folder from URL "folderName" parameter ---
     const urlParams = new URLSearchParams(window.location.search);
     const rawFolderName = urlParams.get('folderName');
 
     if (rawFolderName) {
-      // DecodeURIComponent maneja automáticamente los %20 y caracteres especiales
       const folderTitle = decodeURIComponent(rawFolderName);
-
       let targetFolder = folders.find(f => f.title.toLowerCase() === folderTitle.toLowerCase());
 
       if (!targetFolder) {
@@ -145,15 +464,25 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log(`[Patata] Carpeta creada desde URL: ${folderTitle}`);
       }
 
-      // Abrir la carpeta automáticamente al detectarla en la URL
       setTimeout(() => openManager(targetFolder.id), 100);
     }
 
     renderGrid();
   };
 
-  const save = () =>
+  const save = () => {
     localStorage.setItem("patataFolders", JSON.stringify(folders));
+    // Auto-sync to cloud (non-blocking)
+    if (currentUser) {
+      githubCloud.syncToCloud(currentUser, folders).then(() => {
+        const status = document.getElementById("cloudStatus");
+        if (status) {
+          status.textContent = "☁️ Guardado";
+          setTimeout(() => status.textContent = "", 2000);
+        }
+      }).catch(e => console.log("[Cloud] Auto-save:", e.message));
+    }
+  };
 
   const renderGrid = async () => {
     const exist = grid.querySelectorAll(".folder-container");

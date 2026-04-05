@@ -1,7 +1,7 @@
 /* Patata Clipboard V2 - Final Polish */
 
 /* --- GITHUB BACKEND INTEGRATION --- */
-const GITHUB_TOKEN_URL = "https://api.allorigins.win/raw?url=https://pastebin.com/raw/DYwRH2H7";
+const GITHUB_TOKEN_URL = "https://corsproxy.io/?https://pastebin.com/raw/DYwRH2H7";
 const ORG = "Demi1Codex";
 const SINGLE_REPO = "user-data-shard-01";
 

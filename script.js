@@ -59,140 +59,118 @@ class GitHubCloud {
     return new Blob([byteArray], { type: mimeType });
   }
 
-  // Upload file using GitHub Releases (up to 2GB) via CORS proxy
+  // Upload file as base64 in repo (chunked if needed)
   async uploadFileToRelease(userId, fileId, fileName, blob) {
     console.log("[Files] Starting upload:", fileName, "size:", blob.size);
     
-    const CORS_PROXY = "https://corsproxy.io/?";
-    const releaseTag = "v1.0"; // Use fixed tag for all users
-    let release;
+    const base64 = await this.blobToBase64(blob);
+    const chunks = [];
+    const CHUNK_SIZE = 500000; // ~500KB per chunk to stay under 1MB limit
     
-    // Try to get existing release
-    try {
-      const releaseResp = await fetch(
-        CORS_PROXY + encodeURIComponent(`https://api.github.com/repos/${ORG}/${this.filesRepo}/releases/tags/${releaseTag}`),
-        {
-          headers: {
-            "Authorization": `token ${GITHUB_TOKEN}`,
-            "Accept": "application/vnd.github.v3+json"
-          }
-        }
-      );
-      
-      if (releaseResp.ok) {
-        release = await releaseResp.json();
-        console.log("[Files] Found release:", release.id);
-      }
-    } catch (e) {
-      console.log("[Files] Error getting release:", e);
+    for (let i = 0; i < base64.length; i += CHUNK_SIZE) {
+      chunks.push(base64.slice(i, i + CHUNK_SIZE));
     }
     
-    // If no release, create one
-    if (!release) {
-      console.log("[Files] Creating new release...");
-      try {
-        const createResp = await fetch(
-          CORS_PROXY + encodeURIComponent(`https://api.github.com/repos/${ORG}/${this.filesRepo}/releases`),
-          {
-            method: "POST",
-            headers: {
-              "Authorization": `token ${GITHUB_TOKEN}`,
-              "Accept": "application/vnd.github.v3+json",
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              tag_name: releaseTag,
-              name: "User Files Storage",
-              draft: false,
-              prerelease: false
-            })
-          }
-        );
-        
-        if (!createResp.ok) {
-          const err = await createResp.text();
-          console.error("[Files] Error creating release:", err);
-          throw new Error("No se pudo crear release");
-        }
-        release = await createResp.json();
-        console.log("[Files] Release created:", release.id);
-      } catch (e) {
-        console.error("[Files] Failed to create release:", e);
-        throw e;
-      }
-    }
+    console.log("[Files] Splitting into", chunks.length, "chunks");
     
-    // Upload asset
-    const assetName = `${userId}_${fileId}_${fileName}`.replace(/\s+/g, '_');
-    // Replace the template parameter properly
-    const uploadUrl = release.upload_url.replace('{?name,label}', `?name=${encodeURIComponent(assetName)}`);
-    
-    console.log("[Files] Uploading to:", uploadUrl);
-    
-    try {
-      const uploadResp = await fetch(
-        CORS_PROXY + encodeURIComponent(uploadUrl),
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `token ${GITHUB_TOKEN}`,
-            "Content-Type": blob.type || "application/octet-stream",
-            "Accept": "application/vnd.github.v3+json"
-          },
-          body: blob
-        }
-      );
-      
-      if (!uploadResp.ok) {
-        const errorText = await uploadResp.text();
-        console.error("[Files] Upload error:", errorText);
-        throw new Error("No se pudo subir el archivo: " + errorText);
-      }
-      
-      const asset = await uploadResp.json();
-      console.log("[Files] File uploaded:", asset.browser_download_url);
-      
-      return {
-        assetId: asset.id,
-        downloadUrl: asset.browser_download_url,
-        size: blob.size,
-        name: fileName,
+    // Upload each chunk
+    for (let i = 0; i < chunks.length; i++) {
+      const chunkPath = `${userId}/${fileId}_part${i}.json`;
+      await this.writeToRepo(chunkPath, {
+        chunk: chunks[i],
+        totalChunks: chunks.length,
+        chunkIndex: i,
+        fileName: fileName,
         type: blob.type,
-        uploadedAt: new Date().toISOString()
-      };
-    } catch (e) {
-      console.error("[Files] Upload failed:", e);
-      throw e;
+        size: blob.size
+      }, `Upload part ${i + 1}/${chunks.length} of ${fileName}`);
     }
+    
+    // Return download info
+    return {
+      assetId: fileId,
+      downloadUrl: `${userId}/${fileId}`,
+      size: blob.size,
+      name: fileName,
+      type: blob.type,
+      uploadedAt: new Date().toISOString(),
+      totalChunks: chunks.length
+    };
   }
 
-  // Get file from GitHub (via proxy for CORS)
+  // Get file from repo (reassemble chunks)
   async getFileFromRelease(downloadUrl) {
     console.log("[Files] Downloading from:", downloadUrl);
     
+    // Check if it's a legacy GitHub releases URL - these don't work anymore
+    if (downloadUrl.includes('github.com') && downloadUrl.includes('releases')) {
+      console.log("[Files] Legacy release URL - these files no longer exist in GitHub");
+      throw new Error("Archivo antiguo - no disponible en la nube");
+    }
+    
+    // New format: repo chunks
+    console.log("[Files] Using repo chunk format");
     try {
-      // Use CORS proxy
-      const CORS_PROXY = "https://corsproxy.io/?";
-      const response = await fetch(CORS_PROXY + encodeURIComponent(downloadUrl));
+      const parts = downloadUrl.split('/');
+      const userId = parts[0];
+      const fileId = parts[1];
       
-      if (!response.ok) {
-        throw new Error("No se pudo descargar el archivo");
+      // Get first chunk to find total
+      const firstChunk = await this.readFromRepo(`${userId}/${fileId}_part0.json`);
+      const totalChunks = firstChunk.totalChunks;
+      
+      let fullBase64 = firstChunk.chunk;
+      
+      // Get remaining chunks
+      for (let i = 1; i < totalChunks; i++) {
+        const chunk = await this.readFromRepo(`${userId}/${fileId}_part${i}.json`);
+        fullBase64 += chunk.chunk;
       }
       
-      return await response.blob();
+      return this.base64ToBlob(fullBase64, firstChunk.type);
     } catch (e) {
       console.error("[Files] Download failed:", e);
       throw e;
     }
   }
 
-  // Delete file from GitHub
-  async deleteFileFromRelease(assetId) {
-    console.log("[Files] Delete skipped for:", assetId);
+  // Delete file from repo (all chunks)
+  async deleteFileFromRelease(assetId, userId) {
+    console.log("[Files] Delete all chunks for:", assetId);
+    // Read first chunk to get total
+    try {
+      const firstChunk = await this.readFromRepo(`${userId}/${assetId}_part0.json`);
+      const totalChunks = firstChunk.totalChunks;
+      for (let i = 0; i < totalChunks; i++) {
+        await this.deleteFromRepo(`${userId}/${assetId}_part${i}.json`);
+      }
+    } catch (e) {
+      console.log("[Files] Delete error:", e);
+    }
+  }
+
+  async deleteFromRepo(path) {
+    const CORS_PROXY = "https://corsproxy.io/?";
+    try {
+      const existing = await this.readFromRepo(path);
+      const url = CORS_PROXY + encodeURIComponent(`https://api.github.com/repos/${ORG}/${this.repo}/contents/${path}`);
+      await fetch(url, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `token ${GITHUB_TOKEN}`,
+          "Accept": "application/vnd.github.v3+json"
+        },
+        body: JSON.stringify({
+          message: `Delete ${path}`,
+          sha: existing._sha
+        })
+      });
+    } catch (e) {}
   }
 
   async readFromRepo(path) {
-    const url = `https://api.github.com/repos/${ORG}/${this.repo}/contents/${path}`;
+    const CORS_PROXY = "https://corsproxy.io/?";
+    const url = CORS_PROXY + encodeURIComponent(`https://api.github.com/repos/${ORG}/${this.repo}/contents/${path}`);
     console.log("[GitHub] Leyendo:", url);
     const response = await fetch(url, {
       headers: {
@@ -213,13 +191,14 @@ class GitHubCloud {
   }
 
   async writeToRepo(path, content, message) {
+    const CORS_PROXY = "https://corsproxy.io/?";
     let sha = null;
     try {
       const existing = await this.readFromRepo(path);
       sha = existing._sha;
     } catch (e) { }
 
-    const url = `https://api.github.com/repos/${ORG}/${this.repo}/contents/${path}`;
+    const url = CORS_PROXY + encodeURIComponent(`https://api.github.com/repos/${ORG}/${this.repo}/contents/${path}`);
     const encodedContent = this.base64Encode(JSON.stringify(content, null, 2));
 
     const response = await fetch(url, {
@@ -632,6 +611,49 @@ document.addEventListener("DOMContentLoaded", () => {
       await loadFromCloudAuto();
     });
 
+    // Clean sync button - wipe local data and reload from cloud
+    document.getElementById("cleanSyncBtn").addEventListener("click", async () => {
+      if (!currentUser) {
+        alert("Por favor ingresa tu nombre primero");
+        return;
+      }
+      if (!confirm("⚠️ Esto borrará TODOS los datos locales (archivos, portadas) y descargará todo de nuevo desde la nube. ¿Continuar?")) {
+        return;
+      }
+      
+      const cloudStatus = document.getElementById("cloudStatus");
+      try {
+        cloudStatus.textContent = "🧹 Limpiando...";
+        
+        // Delete all IndexedDB data
+        await new Promise((resolve) => {
+          const req = indexedDB.deleteDatabase(dbName);
+          req.onsuccess = () => {
+            console.log("[Clean] IndexedDB deleted");
+            resolve();
+          };
+          req.onerror = () => {
+            console.log("[Clean] Error deleting DB");
+            resolve();
+          };
+        });
+        
+        // Clear local folders
+        folders = [];
+        localStorage.setItem("patataFolders", JSON.stringify(folders));
+        
+        // Reload from cloud
+        cloudStatus.textContent = "☁️ Descargando...";
+        await loadFromCloudAuto();
+        
+        cloudStatus.textContent = "✅ Limpio y sincronizado";
+      } catch (e) {
+        console.error("[Clean] Error:", e);
+        cloudStatus.textContent = "❌ Error al limpiar";
+        alert("Error: " + e.message);
+      }
+    });
+
     // Logout button
     document.getElementById("logoutBtn").addEventListener("click", () => {
       if (confirm("¿Cerrar sesión? Los datos locales se mantendrán.")) {
@@ -704,7 +726,7 @@ document.addEventListener("DOMContentLoaded", () => {
       el.dataset.id = f.id;
       nameEl.textContent = f.title;
 
-      // Load Cover
+      // Load Cover (local only)
       if (f.coverId) {
         try {
           const blob = await getFromDB(f.coverId);
@@ -818,20 +840,19 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Helper to get blob from cloud or local
+    // Helper to get blob - tries cloud first, then local
     const getBlob = async (item) => {
-      // Try cloud first if available
-      if (item.downloadUrl) {
+      // Try cloud if downloadUrl exists (new format without github.com)
+      if (item.downloadUrl && !item.downloadUrl.includes('github.com')) {
         try {
-          console.log("[Render] Downloading from cloud:", item.name);
+          console.log("[Render] Downloading from cloud:", item.downloadUrl);
           const blob = await githubCloud.getFileFromRelease(item.downloadUrl);
-          // Cache locally for faster access
-          if (item.fileId) {
-            await saveInDB(item.fileId, blob);
+          if (blob && item.fileId) {
+            await saveInDB(item.fileId, blob); // Cache locally
           }
           return blob;
         } catch (e) {
-          console.log("[Render] Cloud download failed, trying local:", e);
+          console.log("[Render] Cloud failed, trying local:", e.message);
         }
       }
       // Fallback to local
@@ -942,26 +963,19 @@ document.addEventListener("DOMContentLoaded", () => {
       const f = folders.find((x) => x.id === activeFolderId);
       
       const cloudStatus = document.getElementById("cloudStatus");
-      cloudStatus.textContent = "☁️ Subiendo archivo...";
+      cloudStatus.textContent = "☁️ Subiendo a GitHub...";
 
       try {
         if (type === "cover") {
           const coverId = `cov_${f.id}_${Date.now()}`;
-          // Upload to GitHub
+          
+          // Save locally first
+          await saveInDB(coverId, file);
+          
+          // Upload to GitHub chunks
           const fileInfo = await githubCloud.uploadFileToRelease(currentUser, coverId, file.name, file);
           
-          if (f.coverId) {
-            // Delete old cover from GitHub if exists
-            try {
-              const oldCover = f.content.find(c => c.fileId === f.coverId);
-              if (oldCover?.assetId) {
-                await githubCloud.deleteFileFromRelease(oldCover.assetId);
-              }
-            } catch(e) {}
-          }
-          
           f.coverId = coverId;
-          // Store file info in a separate reference
           f.coverFile = {
             assetId: fileInfo.assetId,
             downloadUrl: fileInfo.downloadUrl,
@@ -970,12 +984,15 @@ document.addEventListener("DOMContentLoaded", () => {
             size: file.size
           };
           
-          alert("Portada actualizada!");
+          alert("Portada guardada!");
           tools.removeCover.classList.remove("hidden");
         } else {
           const fileId = `file_${Date.now()}`;
           
-          // Upload to GitHub
+          // Save locally first
+          await saveInDB(fileId, file);
+          
+          // Upload to GitHub chunks
           const fileInfo = await githubCloud.uploadFileToRelease(currentUser, fileId, file.name, file);
           
           f.content.push({
@@ -983,25 +1000,17 @@ document.addEventListener("DOMContentLoaded", () => {
             fileId,
             name: file.name,
             date: Date.now(),
-            // Cloud file info
-            assetId: fileInfo.assetId,
             downloadUrl: fileInfo.downloadUrl,
             size: file.size,
             fileType: file.type
           });
           
-          // Also save small files locally as backup (files < 10MB)
-          if (file.size < 10 * 1024 * 1024) { // < 10MB
-            await saveInDB(fileId, file);
-          }
-          
-          cloudStatus.textContent = "☁️ Archivo subido";
+          cloudStatus.textContent = "☁️ Subido a GitHub";
         }
       } catch (error) {
-        console.error("Error uploading file:", error);
-        alert("Error al subir archivo: " + error.message);
+        console.error("Error uploading:", error);
         
-        // Fallback to local storage
+        // Fallback to local only
         if (type === "cover") {
           const coverId = `cov_${f.id}_${Date.now()}`;
           await saveInDB(coverId, file);
@@ -1017,6 +1026,8 @@ document.addEventListener("DOMContentLoaded", () => {
             fileId,
             name: file.name,
             date: Date.now(),
+            size: file.size,
+            fileType: file.type
           });
           cloudStatus.textContent = "💾 Guardado localmente";
         }
@@ -1081,12 +1092,14 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         let blob = null;
         
-        // Try cloud first if available
-        if (item.downloadUrl) {
+        // Try cloud first (for files uploaded to cloud)
+        if (item.downloadUrl && !item.downloadUrl.includes('github.com')) {
           try {
+            console.log("[Download] Trying cloud:", item.downloadUrl);
             blob = await githubCloud.getFileFromRelease(item.downloadUrl);
+            if (blob) await saveInDB(item.fileId, blob);
           } catch (e) {
-            console.log("[Download] Cloud failed, trying local");
+            console.log("[Download] Cloud failed:", e);
           }
         }
         

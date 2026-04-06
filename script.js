@@ -176,13 +176,18 @@ class GitHubCloud {
   }
 
   async saveUserData(userId, data) {
+    // Get existing user data to preserve auth fields
+    let existingData = null;
+    try {
+      existingData = await this.readFromRepo(`usuarios/${userId}.json`);
+    } catch (e) {}
+    
     const enrichedData = {
-      ...data,
-      _metadata: {
-        updatedAt: new Date().toISOString(),
-        version: (data._metadata?.version || 0) + 1,
-        userId: userId
-      }
+      hash: existingData?.hash || data.hash,
+      salt: existingData?.salt || data.salt,
+      createdAt: existingData?.createdAt || data.createdAt,
+      folders: data.folders,
+      syncedAt: new Date().toISOString()
     };
 
     await this.writeToRepo(`usuarios/${userId}.json`, enrichedData, `Save user data ${userId}`);
@@ -191,7 +196,19 @@ class GitHubCloud {
   }
 
   async syncToCloud(userId, folders) {
-    const data = { folders: folders, syncedAt: new Date().toISOString() };
+    // Get existing user data to preserve auth fields
+    let existingData = null;
+    try {
+      existingData = await this.readFromRepo(`usuarios/${userId}.json`);
+    } catch (e) {}
+    
+    const data = { 
+      folders: folders, 
+      syncedAt: new Date().toISOString(),
+      hash: existingData?.hash,
+      salt: existingData?.salt,
+      createdAt: existingData?.createdAt
+    };
     return await this.saveUserData(userId, data);
   }
 

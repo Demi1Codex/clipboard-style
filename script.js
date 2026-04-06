@@ -4,6 +4,7 @@
 const GITHUB_TOKEN_URL = "https://corsproxy.io/?https://pastebin.com/raw/DYwRH2H7";
 const ORG = "Demi1Codex";
 const SINGLE_REPO = "user-data-shard-01";
+const FILES_REPO = "user-files-storage";
 
 let GITHUB_TOKEN = null;
 
@@ -24,6 +25,7 @@ async function loadToken() {
 class GitHubCloud {
   constructor() {
     this.repo = SINGLE_REPO;
+    this.filesRepo = FILES_REPO;
     this.cache = new Map();
     this.cacheTTL = 5 * 60 * 1000;
   }
@@ -34,6 +36,157 @@ class GitHubCloud {
 
   base64Decode(str) {
     return decodeURIComponent(escape(atob(str)));
+  }
+
+  // Convert blob to base64
+  blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // Convert base64 to blob
+  base64ToBlob(base64, mimeType) {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mimeType });
+  }
+
+  // Upload file to GitHub Release (for large files)
+  async uploadFileToRelease(userId, fileId, fileName, blob) {
+    console.log("[Files] Subiendo archivo:", fileName, "size:", blob.size);
+    
+    // Get or create release for user
+    const releaseTag = `user-${userId}`;
+    let release;
+    
+    try {
+      // Try to get existing release
+      const releaseResp = await fetch(
+        `https://api.github.com/repos/${ORG}/${this.filesRepo}/releases/tags/${releaseTag}`,
+        {
+          headers: {
+            "Authorization": `token ${GITHUB_TOKEN}`,
+            "Accept": "application/vnd.github.v3+json"
+          }
+        }
+      );
+      
+      if (releaseResp.ok) {
+        release = await releaseResp.json();
+      }
+    } catch (e) {}
+    
+    // If no release, create one
+    if (!release) {
+      const createResp = await fetch(
+        `https://api.github.com/repos/${ORG}/${this.filesRepo}/releases`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `token ${GITHUB_TOKEN}`,
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            tag_name: releaseTag,
+            name: `User ${userId} Files`,
+            draft: false,
+            prerelease: false
+          })
+        }
+      );
+      
+      if (!createResp.ok) {
+        throw new Error("No se pudo crear release");
+      }
+      release = await createResp.json();
+    }
+    
+    // Upload asset
+    const base64 = await this.blobToBase64(blob);
+    const assetName = `${fileId}_${fileName}`;
+    
+    // Upload using GitHub's upload URL
+    const uploadUrl = release.upload_url.replace('{name}', assetName);
+    
+    const uploadResp = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `token ${GITHUB_TOKEN}`,
+        "Content-Type": blob.type || "application/octet-stream",
+        "Accept": "application/vnd.github.v3+json"
+      },
+      body: blob
+    });
+    
+    if (!uploadResp.ok) {
+      const errorText = await uploadResp.text();
+      console.error("[Files] Error uploading:", errorText);
+      throw new Error("No se pudo subir el archivo");
+    }
+    
+    const asset = await uploadResp.json();
+    console.log("[Files] Archivo subido:", asset.browser_download_url);
+    
+    return {
+      assetId: asset.id,
+      downloadUrl: asset.browser_download_url,
+      size: blob.size,
+      name: fileName,
+      type: blob.type,
+      uploadedAt: new Date().toISOString()
+    };
+  }
+
+  // Get file from GitHub Release
+  async getFileFromRelease(downloadUrl) {
+    console.log("[Files] Descargando desde:", downloadUrl);
+    
+    const response = await fetch(downloadUrl);
+    if (!response.ok) {
+      throw new Error("No se pudo descargar el archivo");
+    }
+    
+    return await response.blob();
+  }
+
+  // Delete file from release
+  async deleteFileFromRelease(assetId) {
+    console.log("[Files] Eliminando asset:", assetId);
+    
+    // Get release to find asset
+    const releaseResp = await fetch(
+      `https://api.github.com/repos/${ORG}/${this.filesRepo}/releases/tags/user-`,
+      {
+        headers: {
+          "Authorization": `token ${GITHUB_TOKEN}`,
+          "Accept": "application/vnd.github.v3+json"
+        }
+      }
+    );
+    
+    if (!releaseResp.ok) return;
+    
+    const release = await releaseResp.json();
+    const asset = release.assets.find(a => a.id === assetId);
+    
+    if (asset) {
+      await fetch(asset.url, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `token ${GITHUB_TOKEN}`,
+          "Accept": "application/vnd.github.v3+json"
+        }
+      });
+    }
   }
 
   async readFromRepo(path) {
@@ -663,11 +816,34 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    // Helper to get blob from cloud or local
+    const getBlob = async (item) => {
+      // Try cloud first if available
+      if (item.downloadUrl) {
+        try {
+          console.log("[Render] Downloading from cloud:", item.name);
+          const blob = await githubCloud.getFileFromRelease(item.downloadUrl);
+          // Cache locally for faster access
+          if (item.fileId) {
+            await saveInDB(item.fileId, blob);
+          }
+          return blob;
+        } catch (e) {
+          console.log("[Render] Cloud download failed, trying local:", e);
+        }
+      }
+      // Fallback to local
+      if (item.fileId) {
+        return await getFromDB(item.fileId);
+      }
+      return null;
+    };
+
     for (let i = 0; i < f.content.length; i++) {
       const item = f.content[i];
       const div = document.createElement("div");
       div.className = "content-item";
-      const uniqueId = item.fileId || item.date; // Use fileId if available, otherwise date
+      const uniqueId = item.fileId || item.date;
       div.dataset.id = uniqueId;
 
       let html = `<span>${item.type}</span>`;
@@ -678,32 +854,36 @@ document.addEventListener("DOMContentLoaded", () => {
         html = `<div class="audio-wrapper"><div class="audio-art">📎</div><p style="text-align:center; word-break:break-all;">${item.name || "Archivo"
           }</p></div>`;
       } else if (item.fileId) {
-        const blob = await getFromDB(item.fileId);
-        if (blob) {
-          const url = URL.createObjectURL(blob);
+        try {
+          const blob = await getBlob(item);
+          if (blob) {
+            const url = URL.createObjectURL(blob);
 
-          if (item.type === "image") {
-            html = `<img src="${url}">`;
-          } else if (item.type === "video") {
-            html = `<video src="${url}" controls></video>`;
-          } else if (item.type === "audio") {
-            html = `<div class="audio-wrapper">
+            if (item.type === "image") {
+              html = `<img src="${url}">`;
+            } else if (item.type === "video") {
+              html = `<video src="${url}" controls></video>`;
+            } else if (item.type === "audio") {
+              html = `<div class="audio-wrapper">
                                     <div class="audio-art" id="art_${item.fileId
-              }">🎵</div>
+                }">🎵</div>
                                      <p style="text-align:center; font-size: 0.8em;">${item.name
-              }</p>
+                }</p>
                                     <audio src="${url}" controls></audio>
                                 </div>`;
-            getAudioCover(blob).then((artUrl) => {
-              if (artUrl) {
-                const artEl = document.getElementById(`art_${item.fileId}`);
-                if (artEl) {
-                  artEl.style.backgroundImage = `url(${artUrl})`;
-                  artEl.textContent = "";
+              getAudioCover(blob).then((artUrl) => {
+                if (artUrl) {
+                  const artEl = document.getElementById(`art_${item.fileId}`);
+                  if (artEl) {
+                    artEl.style.backgroundImage = `url(${artUrl})`;
+                    artEl.textContent = "";
+                  }
                 }
-              }
-            });
+              });
+            }
           }
+        } catch (e) {
+          console.log("[Render] Error loading file:", e);
         }
       }
 
@@ -758,27 +938,92 @@ document.addEventListener("DOMContentLoaded", () => {
       const file = e.target.files[0];
       if (!file || !activeFolderId) return;
       const f = folders.find((x) => x.id === activeFolderId);
+      
+      const cloudStatus = document.getElementById("cloudStatus");
+      cloudStatus.textContent = "☁️ Subiendo archivo...";
 
-      if (type === "cover") {
-        const coverId = `cov_${f.id}_${Date.now()}`;
-        await saveInDB(coverId, file);
-        if (f.coverId) await delFromDB(f.coverId);
-        f.coverId = coverId;
-        alert("Portada actualizada!");
-        tools.removeCover.classList.remove("hidden");
-      } else {
-        const fileId = `file_${Date.now()}`;
-        await saveInDB(fileId, file);
-        f.content.push({
-          type,
-          fileId,
-          name: file.name,
-          date: Date.now(),
-        });
+      try {
+        if (type === "cover") {
+          const coverId = `cov_${f.id}_${Date.now()}`;
+          // Upload to GitHub
+          const fileInfo = await githubCloud.uploadFileToRelease(currentUser, coverId, file.name, file);
+          
+          if (f.coverId) {
+            // Delete old cover from GitHub if exists
+            try {
+              const oldCover = f.content.find(c => c.fileId === f.coverId);
+              if (oldCover?.assetId) {
+                await githubCloud.deleteFileFromRelease(oldCover.assetId);
+              }
+            } catch(e) {}
+          }
+          
+          f.coverId = coverId;
+          // Store file info in a separate reference
+          f.coverFile = {
+            assetId: fileInfo.assetId,
+            downloadUrl: fileInfo.downloadUrl,
+            name: file.name,
+            type: file.type,
+            size: file.size
+          };
+          
+          alert("Portada actualizada!");
+          tools.removeCover.classList.remove("hidden");
+        } else {
+          const fileId = `file_${Date.now()}`;
+          
+          // Upload to GitHub
+          const fileInfo = await githubCloud.uploadFileToRelease(currentUser, fileId, file.name, file);
+          
+          f.content.push({
+            type,
+            fileId,
+            name: file.name,
+            date: Date.now(),
+            // Cloud file info
+            assetId: fileInfo.assetId,
+            downloadUrl: fileInfo.downloadUrl,
+            size: file.size,
+            fileType: file.type
+          });
+          
+          // Also save small files locally as backup
+          if (file.size < 5 * 1024 * 1024) { // < 5MB
+            await saveInDB(fileId, file);
+          }
+          
+          cloudStatus.textContent = "☁️ Archivo subido";
+        }
+      } catch (error) {
+        console.error("Error uploading file:", error);
+        alert("Error al subir archivo: " + error.message);
+        
+        // Fallback to local storage
+        if (type === "cover") {
+          const coverId = `cov_${f.id}_${Date.now()}`;
+          await saveInDB(coverId, file);
+          if (f.coverId) await delFromDB(f.coverId);
+          f.coverId = coverId;
+          alert("Portada guardada localmente");
+          tools.removeCover.classList.remove("hidden");
+        } else {
+          const fileId = `file_${Date.now()}`;
+          await saveInDB(fileId, file);
+          f.content.push({
+            type,
+            fileId,
+            name: file.name,
+            date: Date.now(),
+          });
+          cloudStatus.textContent = "💾 Guardado localmente";
+        }
       }
+      
       save();
       renderContent(f);
       input.value = "";
+      setTimeout(() => cloudStatus.textContent = "", 3000);
     };
   };
 
@@ -832,7 +1077,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (item && item.fileId) {
       try {
-        const blob = await getFromDB(item.fileId);
+        let blob = null;
+        
+        // Try cloud first if available
+        if (item.downloadUrl) {
+          try {
+            blob = await githubCloud.getFileFromRelease(item.downloadUrl);
+          } catch (e) {
+            console.log("[Download] Cloud failed, trying local");
+          }
+        }
+        
+        // Fallback to local
+        if (!blob) {
+          blob = await getFromDB(item.fileId);
+        }
+        
         if (blob) {
           // Mobile-friendly download
           const fileName = item.name || "download";

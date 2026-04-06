@@ -64,7 +64,7 @@ class GitHubCloud {
     console.log("[Files] Starting upload:", fileName, "size:", blob.size);
     
     const CORS_PROXY = "https://corsproxy.io/?";
-    const releaseTag = `user-${userId}`;
+    const releaseTag = "v1.0"; // Use fixed tag for all users
     let release;
     
     // Try to get existing release
@@ -76,6 +76,94 @@ class GitHubCloud {
             "Authorization": `token ${GITHUB_TOKEN}`,
             "Accept": "application/vnd.github.v3+json"
           }
+        }
+      );
+      
+      if (releaseResp.ok) {
+        release = await releaseResp.json();
+        console.log("[Files] Found release:", release.id);
+      }
+    } catch (e) {
+      console.log("[Files] Error getting release:", e);
+    }
+    
+    // If no release, create one
+    if (!release) {
+      console.log("[Files] Creating new release...");
+      try {
+        const createResp = await fetch(
+          CORS_PROXY + encodeURIComponent(`https://api.github.com/repos/${ORG}/${this.filesRepo}/releases`),
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `token ${GITHUB_TOKEN}`,
+              "Accept": "application/vnd.github.v3+json",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              tag_name: releaseTag,
+              name: "User Files Storage",
+              draft: false,
+              prerelease: false
+            })
+          }
+        );
+        
+        if (!createResp.ok) {
+          const err = await createResp.text();
+          console.error("[Files] Error creating release:", err);
+          throw new Error("No se pudo crear release");
+        }
+        release = await createResp.json();
+        console.log("[Files] Release created:", release.id);
+      } catch (e) {
+        console.error("[Files] Failed to create release:", e);
+        throw e;
+      }
+    }
+    
+    // Upload asset
+    const assetName = `${userId}_${fileId}_${fileName}`.replace(/\s+/g, '_');
+    const uploadUrl = release.upload_url.replace('{name}', encodeURIComponent(assetName));
+    
+    console.log("[Files] Uploading to:", uploadUrl);
+    
+    try {
+      const uploadResp = await fetch(
+        CORS_PROXY + encodeURIComponent(uploadUrl),
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `token ${GITHUB_TOKEN}`,
+            "Content-Type": blob.type || "application/octet-stream",
+            "Accept": "application/vnd.github.v3+json"
+          },
+          body: blob
+        }
+      );
+      
+      if (!uploadResp.ok) {
+        const errorText = await uploadResp.text();
+        console.error("[Files] Upload error:", errorText);
+        throw new Error("No se pudo subir el archivo: " + errorText);
+      }
+      
+      const asset = await uploadResp.json();
+      console.log("[Files] File uploaded:", asset.browser_download_url);
+      
+      return {
+        assetId: asset.id,
+        downloadUrl: asset.browser_download_url,
+        size: blob.size,
+        name: fileName,
+        type: blob.type,
+        uploadedAt: new Date().toISOString()
+      };
+    } catch (e) {
+      console.error("[Files] Upload failed:", e);
+      throw e;
+    }
+  }
         }
       );
       

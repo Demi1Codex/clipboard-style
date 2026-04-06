@@ -139,20 +139,21 @@ class GitHubCloud {
 
   hashPassword(password, salt) {
     const combined = password + salt;
-    // Use Web Crypto API for consistent SHA-256 hashing
+    console.log("[Hash] Input:", combined);
+    
     return crypto.subtle.digest('SHA-256', new TextEncoder().encode(combined))
       .then(hashBuffer => {
         const hashArray = Array.from(new Uint8Array(hashBuffer));
         const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        console.log("[Hash] Output:", hashHex);
         return hashHex + salt;
       });
   }
 
   async verifyPassword(password, salt, expectedHash) {
     const computedHash = await this.hashPassword(password, salt);
-    console.log("[Hash] Computed:", computedHash.substring(0, 20), "...");
-    console.log("[Hash] Expected: ", expectedHash.substring(0, 20), "...");
-    console.log("[Hash] Match:", computedHash === expectedHash);
+    console.log("[Verify] Computed (with salt):", computedHash);
+    console.log("[Verify] Expected (with salt):", expectedHash);
     return computedHash === expectedHash;
   }
 

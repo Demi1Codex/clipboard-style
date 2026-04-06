@@ -142,6 +142,7 @@ class GitHubCloud {
       hash = ((hash << 5) - hash) + combined.charCodeAt(i);
       hash |= 0;
     }
+    console.log("[Hash] Result:", Math.abs(hash).toString(36) + salt);
     return Math.abs(hash).toString(36) + salt;
   }
 

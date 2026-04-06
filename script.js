@@ -834,14 +834,40 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const blob = await getFromDB(item.fileId);
         if (blob) {
+          // Mobile-friendly download
+          const fileName = item.name || "download";
           const url = URL.createObjectURL(blob);
+          
+          // For mobile, try using the download attribute first
           const a = document.createElement("a");
           a.href = url;
-          a.download = item.name || "download"; // Use stored name
+          a.download = fileName;
+          a.style.display = "none";
           document.body.appendChild(a);
+          
+          // Try click download
           a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          
+          // For mobile browsers that don't support download attribute,
+          // also try opening in new tab
+          setTimeout(() => {
+            try {
+              const openA = document.createElement("a");
+              openA.href = url;
+              openA.target = "_blank";
+              openA.rel = "noopener";
+              document.body.appendChild(openA);
+              openA.click();
+              setTimeout(() => {
+                document.body.removeChild(openA);
+              }, 100);
+            } catch(e) {}
+          }, 500);
+          
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 1000);
         }
       } catch (error) {
         console.error("Download failed:", error);

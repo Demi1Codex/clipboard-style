@@ -124,7 +124,8 @@ class GitHubCloud {
     
     // Upload asset
     const assetName = `${userId}_${fileId}_${fileName}`.replace(/\s+/g, '_');
-    const uploadUrl = release.upload_url.replace('{name}', encodeURIComponent(assetName));
+    // Replace the template parameter properly
+    const uploadUrl = release.upload_url.replace('{?name,label}', `?name=${encodeURIComponent(assetName)}`);
     
     console.log("[Files] Uploading to:", uploadUrl);
     

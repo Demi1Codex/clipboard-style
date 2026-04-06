@@ -148,8 +148,9 @@ class GitHubCloud {
       hash = ((hash << 5) - hash) + combined.charCodeAt(i);
       hash |= 0;
     }
-    console.log("[Hash] Result:", Math.abs(hash).toString(36) + salt);
-    return Math.abs(hash).toString(36) + salt;
+    // Convert to hex like PowerShell
+    const hexHash = Math.abs(hash).toString(16);
+    return hexHash + salt;
   }
 
   async getUserData(userId) {

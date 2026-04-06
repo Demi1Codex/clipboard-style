@@ -150,6 +150,9 @@ class GitHubCloud {
 
   async verifyPassword(password, salt, expectedHash) {
     const computedHash = await this.hashPassword(password, salt);
+    console.log("[Hash] Computed:", computedHash.substring(0, 20), "...");
+    console.log("[Hash] Expected: ", expectedHash.substring(0, 20), "...");
+    console.log("[Hash] Match:", computedHash === expectedHash);
     return computedHash === expectedHash;
   }
 

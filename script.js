@@ -114,12 +114,18 @@ class GitHubCloud {
   async loginUser(username, password) {
     const userPath = `usuarios/${username}.json`;
     console.log("[GitHub] Intentando login:", userPath);
+    console.log("[GitHub] Password a verificar:", password);
     
     try {
       const userData = await this.readFromRepo(userPath);
-      console.log("[GitHub] Usuario encontrado, verificando contraseña...");
+      console.log("[GitHub] Usuario encontrado, datos:", userData);
+      console.log("[GitHub] Salt del usuario:", userData.salt);
+      console.log("[GitHub] Hash del usuario:", userData.hash);
       
       const hash = this.hashPassword(password, userData.salt);
+      console.log("[GitHub] Hash calculado:", hash);
+      console.log("[GitHub] Comparando:", hash, "==", userData.hash, "=", hash === userData.hash);
+      
       if (hash !== userData.hash) {
         throw new Error("Contraseña incorrecta");
       }

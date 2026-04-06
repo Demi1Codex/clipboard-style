@@ -99,7 +99,7 @@ class GitHubCloud {
     }
     
     const salt = Math.random().toString(36).substring(2);
-    const passwordHash = this.hashPassword(password, salt);
+    const passwordHash = await this.hashPassword(password, salt);
     
     const userData = {
       hash: passwordHash,
@@ -114,19 +114,15 @@ class GitHubCloud {
   async loginUser(username, password) {
     const userPath = `usuarios/${username}.json`;
     console.log("[GitHub] Intentando login:", userPath);
-    console.log("[GitHub] Password a verificar:", password);
     
     try {
       const userData = await this.readFromRepo(userPath);
-      console.log("[GitHub] Usuario encontrado, datos:", userData);
-      console.log("[GitHub] Salt del usuario:", userData.salt);
-      console.log("[GitHub] Hash del usuario:", userData.hash);
+      console.log("[GitHub] Usuario encontrado, verificando contraseña...");
       
-      const hash = this.hashPassword(password, userData.salt);
-      console.log("[GitHub] Hash calculado:", hash);
-      console.log("[GitHub] Comparando:", hash, "==", userData.hash, "=", hash === userData.hash);
+      const isValid = await this.verifyPassword(password, userData.salt, userData.hash);
+      console.log("[GitHub] Contraseña válida:", isValid);
       
-      if (hash !== userData.hash) {
+      if (!isValid) {
         throw new Error("Contraseña incorrecta");
       }
       
@@ -142,15 +138,19 @@ class GitHubCloud {
   }
 
   hashPassword(password, salt) {
-    let hash = 0;
     const combined = password + salt;
-    for (let i = 0; i < combined.length; i++) {
-      hash = ((hash << 5) - hash) + combined.charCodeAt(i);
-      hash |= 0;
-    }
-    // Convert to hex like PowerShell
-    const hexHash = Math.abs(hash).toString(16);
-    return hexHash + salt;
+    // Use Web Crypto API for consistent SHA-256 hashing
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(combined))
+      .then(hashBuffer => {
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex + salt;
+      });
+  }
+
+  async verifyPassword(password, salt, expectedHash) {
+    const computedHash = await this.hashPassword(password, salt);
+    return computedHash === expectedHash;
   }
 
   async getUserData(userId) {

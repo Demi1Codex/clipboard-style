@@ -38,6 +38,7 @@ class GitHubCloud {
 
   async readFromRepo(path) {
     const url = `https://api.github.com/repos/${ORG}/${this.repo}/contents/${path}`;
+    console.log("[GitHub] Leyendo:", url);
     const response = await fetch(url, {
       headers: {
         "Authorization": `token ${GITHUB_TOKEN}`,
@@ -45,6 +46,7 @@ class GitHubCloud {
       }
     });
 
+    console.log("[GitHub] Response status:", response.status);
     if (!response.ok) {
       if (response.status === 404) throw { status: 404 };
       console.error("[GitHub] Error reading:", response.status, response.statusText);
@@ -111,17 +113,21 @@ class GitHubCloud {
 
   async loginUser(username, password) {
     const userPath = `usuarios/${username}.json`;
+    console.log("[GitHub] Intentando login:", userPath);
     
     try {
       const userData = await this.readFromRepo(userPath);
+      console.log("[GitHub] Usuario encontrado, verificando contraseña...");
       
       const hash = this.hashPassword(password, userData.salt);
       if (hash !== userData.hash) {
         throw new Error("Contraseña incorrecta");
       }
       
+      console.log("[GitHub] Login exitoso");
       return true;
     } catch (e) {
+      console.error("[GitHub] Error en login:", e);
       if (e.status === 404) {
         throw new Error("Usuario no encontrado");
       }
@@ -346,6 +352,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Login button
       document.getElementById("loginBtn").addEventListener("click", async () => {
+        console.log("[Login] Botón presionado");
         const username = document.getElementById("userNameInput").value.trim();
         const password = document.getElementById("userPasswordInput").value;
         
@@ -354,16 +361,24 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
         
+        console.log("[Login] Intentando login para:", username);
         try {
           await githubCloud.loginUser(username, password);
           currentUser = username;
           localStorage.setItem("patataUser", username);
-          localStorage.setItem("patataPassword", password);
           nameModal.classList.add("hidden");
           document.getElementById("userDisplay").textContent = username;
           loadFromCloudAuto();
         } catch (e) {
+          console.error("[Login] Error:", e);
           alert(e.message || "Error al iniciar sesión");
+        }
+      });
+      
+      // Login on Enter key
+      document.getElementById("userPasswordInput").addEventListener("keypress", async (e) => {
+        if (e.key === "Enter") {
+          document.getElementById("loginBtn").click();
         }
       });
       

@@ -734,16 +734,31 @@ document.addEventListener("DOMContentLoaded", () => {
       el.dataset.id = f.id;
       nameEl.textContent = f.title;
 
-      // Load Cover (local only)
+      // Load Cover (local first, then cloud fallback)
       if (f.coverId) {
+        let blob = null;
         try {
-          const blob = await getFromDB(f.coverId);
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            coverImg.style.backgroundImage = `url(${url})`;
-            coverImg.classList.remove("hidden");
-          }
+          blob = await getFromDB(f.coverId);
         } catch (e) { }
+        
+        // If not in local, try to download from cloud
+        if (!blob && f.coverFile && f.coverFile.downloadUrl) {
+          try {
+            console.log("[Cover] Not in local, downloading from cloud:", f.coverFile.downloadUrl);
+            blob = await githubCloud.getFileFromRelease(f.coverFile.downloadUrl);
+            if (blob && f.coverId) {
+              await saveInDB(f.coverId, blob);
+            }
+          } catch (e) {
+            console.log("[Cover] Cloud download failed:", e.message);
+          }
+        }
+        
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          coverImg.style.backgroundImage = `url(${url})`;
+          coverImg.classList.remove("hidden");
+        }
       }
 
       // Stack Preview (Logic Improved for Visibility)
@@ -758,14 +773,29 @@ document.addEventListener("DOMContentLoaded", () => {
             paper.classList.add("text-paper");
             paper.innerHTML = '<span style="font-size:1.2rem">📄</span>';
           } else if (item.type === "image" && item.fileId) {
-            getFromDB(item.fileId).then((blob) => {
+            // Try local first, then cloud fallback
+            const loadPreview = async () => {
+              let blob = null;
+              try {
+                blob = await getFromDB(item.fileId);
+              } catch (e) { }
+              
+              // If not in local, try cloud
+              if (!blob && item.downloadUrl && !item.downloadUrl.includes('github.com')) {
+                try {
+                  blob = await githubCloud.getFileFromRelease(item.downloadUrl);
+                  if (blob && item.fileId) {
+                    await saveInDB(item.fileId, blob);
+                  }
+                } catch (e) { }
+              }
+              
               if (blob) {
-                paper.style.backgroundImage = `url(${URL.createObjectURL(
-                  blob,
-                )})`;
+                paper.style.backgroundImage = `url(${URL.createObjectURL(blob)})`;
                 paper.classList.add("media-paper");
               }
-            });
+            };
+            loadPreview();
           } else {
             paper.innerHTML =
               item.type === "video"

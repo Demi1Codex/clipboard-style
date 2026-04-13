@@ -479,6 +479,32 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     
+    // Precargar portadas desde la nube
+    const preloadCovers = async (foldersList) => {
+      console.log("[Preload] Starting cover preload...");
+      let preloaded = 0;
+      
+      for (const f of foldersList) {
+        if (f.coverId && f.coverFile && f.coverFile.downloadUrl) {
+          try {
+            const localBlob = await getFromDB(f.coverId);
+            if (!localBlob) {
+              console.log("[Preload] Downloading cover for:", f.title);
+              const blob = await githubCloud.getFileFromRelease(f.coverFile.downloadUrl);
+              if (blob) {
+                await saveInDB(f.coverId, blob);
+                preloaded++;
+              }
+            }
+          } catch (e) {
+            console.log("[Preload] Failed for", f.title + ":", e.message);
+          }
+        }
+      }
+      
+      console.log("[Preload] Done. Preloaded", preloaded, "covers");
+    };
+
     // Auto-load from cloud function
     const loadFromCloudAuto = async () => {
       const cloudStatus = document.getElementById("cloudStatus");
@@ -488,15 +514,22 @@ document.addEventListener("DOMContentLoaded", () => {
         if (cloudFolders && cloudFolders.length > 0) {
           folders = cloudFolders;
           localStorage.setItem("patataFolders", JSON.stringify(folders));
-          renderGrid();
-          cloudStatus.textContent = "☁️ Sincronizado";
+          cloudStatus.textContent = "☁️ Descargando portadas...";
+          
+          // Precargar portadas en paralelo
+          preloadCovers(folders).then(() => {
+            renderGrid();
+            cloudStatus.textContent = "☁️ Sincronizado";
+            setTimeout(() => cloudStatus.textContent = "", 2000);
+          });
         } else {
           cloudStatus.textContent = "☁️ Listo";
+          renderGrid();
         }
-        setTimeout(() => cloudStatus.textContent = "", 3000);
       } catch (e) {
         cloudStatus.textContent = "☁️ Local";
         console.log("[Cloud] No hay datos en la nube, usando modo local");
+        renderGrid();
       }
     };
 
@@ -734,30 +767,19 @@ document.addEventListener("DOMContentLoaded", () => {
       el.dataset.id = f.id;
       nameEl.textContent = f.title;
 
-      // Load Cover (local first, then cloud fallback)
+      // Load Cover (local only - should be preloaded by now)
       if (f.coverId) {
-        let blob = null;
         try {
-          blob = await getFromDB(f.coverId);
-        } catch (e) { }
-        
-        // If not in local, try to download from cloud
-        if (!blob && f.coverFile && f.coverFile.downloadUrl) {
-          try {
-            console.log("[Cover] Not in local, downloading from cloud:", f.coverFile.downloadUrl);
-            blob = await githubCloud.getFileFromRelease(f.coverFile.downloadUrl);
-            if (blob && f.coverId) {
-              await saveInDB(f.coverId, blob);
-            }
-          } catch (e) {
-            console.log("[Cover] Cloud download failed:", e.message);
+          const blob = await getFromDB(f.coverId);
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            coverImg.style.backgroundImage = `url(${url})`;
+            coverImg.classList.remove("hidden");
+          } else {
+            console.log("[Cover] No blob for:", f.title, "coverId:", f.coverId);
           }
-        }
-        
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          coverImg.style.backgroundImage = `url(${url})`;
-          coverImg.classList.remove("hidden");
+        } catch (e) { 
+          console.log("[Cover] Error loading:", e.message);
         }
       }
 

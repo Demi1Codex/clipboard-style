@@ -119,14 +119,22 @@ class GitHubCloud {
       const firstChunk = await this.readFromRepo(`${userId}/${fileId}_part0.json`);
       const totalChunks = firstChunk.totalChunks;
       
-      let fullBase64 = firstChunk.chunk;
+      // Get all chunks in PARALLEL for faster download
+      const chunkPromises = [];
+      for (let i = 0; i < totalChunks; i++) {
+        chunkPromises.push(this.readFromRepo(`${userId}/${fileId}_part${i}.json`));
+      }
       
-      // Get remaining chunks
-      for (let i = 1; i < totalChunks; i++) {
-        const chunk = await this.readFromRepo(`${userId}/${fileId}_part${i}.json`);
+      console.log(`[Files] Downloading ${totalChunks} chunks in parallel...`);
+      const allChunks = await Promise.all(chunkPromises);
+      
+      // Reassemble in order
+      let fullBase64 = '';
+      for (const chunk of allChunks) {
         fullBase64 += chunk.chunk;
       }
       
+      console.log(`[Files] All chunks received, reconstructing file...`);
       return this.base64ToBlob(fullBase64, firstChunk.type);
     } catch (e) {
       console.error("[Files] Download failed:", e);
